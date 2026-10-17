@@ -5,6 +5,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'pinoy-recipes',
   slug: 'pinoy-recipes',
   scheme: 'pinoyrecipes',
+    extra: {
+    eas: {
+      projectId: '3ce8944e-babf-446d-a0ec-0f001cb26934',
+    },
+  },
   version: '1.0.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
