@@ -10,7 +10,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       projectId: '3ce8944e-babf-446d-a0ec-0f001cb26934',
     },
   },
-  version: '1.0.0',
+  version: '1.0.1',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'light',
