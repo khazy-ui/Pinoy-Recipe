@@ -2,6 +2,7 @@
 //
 // "Profile" tab: styled like the user profile (avatar, stat cards, settings
 // card) with a dark mode switch, About, and Sign Out.
+import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
 import { View, Pressable, Switch, Alert, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
@@ -28,6 +29,7 @@ import ThemedBackground from '../../components/ThemedBackground';
 import { ResponsiveText as Text } from '../../components/ResponsiveText';
 
 export default function AdminProfileScreen() {
+  const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const topInset = useTopInset();
@@ -151,7 +153,7 @@ export default function AdminProfileScreen() {
               <Info size={18} color="#8A6D4E" />
               <View>
                 <Text className="text-[#3A2A1A] dark:text-[#F5EBDD] font-medium">About Pinoy Recipes</Text>
-                <Text className="text-xs text-[#8A6D4E] dark:text-[#B8A48C]">v1.0.0 · Admin</Text>
+                <Text className="text-xs text-[#8A6D4E] dark:text-[#B8A48C]"   >{`v${APP_VERSION} · Admin`}</Text>
               </View>
             </View>
           </Pressable>

@@ -1,4 +1,5 @@
 // app/(tabs)/profile.tsx
+import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
 import { View, Pressable, Switch, Alert, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
@@ -15,6 +16,7 @@ import ThemedBackground from '../../components/ThemedBackground';
 import { ResponsiveText as Text } from '../../components/ResponsiveText';
 
 export default function ProfileScreen() {
+  const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
   const router = useRouter();
   const { user } = useAuthUser();
   const [cookedRecipeCount, setCookedRecipeCount] = useState(0);
@@ -113,7 +115,7 @@ export default function ProfileScreen() {
           <SettingsRow
             icon={<Info size={18} color="#8A6D4E" />}
             title="About Pinoy Recipes"
-            subtitle="v1.0.0"
+            subtitle={`v${APP_VERSION}`}
             onPress={() =>
               Alert.alert(
                 'Pinoy Recipes',
