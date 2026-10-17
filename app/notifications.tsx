@@ -2,9 +2,8 @@
 import { useEffect, useState } from 'react';
 import { View, Pressable, FlatList, ActivityIndicator, Alert, Modal } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { onAuthStateChanged, type User } from 'firebase/auth';
 import { BellRing, Check, MoreHorizontal, X } from 'lucide-react-native';
-import { auth } from '../lib/firebaseClient';
+import { useAuthUser } from '../hooks/useAuthUser';
 import { useMyNotifications } from '../hooks/useMyNotifications';
 import ScreenHeader from '../components/ScreenHeader';
 import ThemedBackground from '../components/ThemedBackground';
@@ -20,8 +19,8 @@ import {
 } from '../services/feedbackService';
 
 export default function NotificationsScreen() {
-  const [user, setUser] = useState<User | null>(auth.currentUser);
-  const { items, loading } = useMyNotifications(user?.uid);
+  const { user } = useAuthUser();
+  const { items, loading } = useMyNotifications(user?.id);
   const isDark = useThemeStore((s) => s.isDark);
   const iconColor = isDark ? '#B8A48C' : '#8A6D4E';
   const router = useRouter();
@@ -53,7 +52,6 @@ export default function NotificationsScreen() {
     setSelectedIds(new Set());
   };
 
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
 
   // Tapping navigates to the detail screen and marks the notification read.
   const handlePress = (n: AppNotification) => {

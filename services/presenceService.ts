@@ -1,13 +1,11 @@
 // services/presenceService.ts
 //
-// Admin online/offline status using Firestore (no extra setup needed).
-// While the app is open and in the foreground, each admin writes a heartbeat to
-// users/{uid} (`online: true`, `lastActive`) every 45s. An admin counts as
-// online only if their last heartbeat is under 2 minutes old, so a crashed or
-// force-closed app drops to offline on its own.
+// Admin online/offline status. While the app is open and in the foreground, each
+// admin writes a heartbeat to their profiles row (`online: true`, `last_active`)
+// every 45s. An admin counts as online only if their last heartbeat is under
+// 2 minutes old, so a crashed or force-closed app drops to offline on its own.
 import { AppState } from 'react-native';
-import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { db } from '../lib/firebaseClient';
+import { supabase } from '../lib/supabase';
 
 const HEARTBEAT_MS = 45_000;
 export const ONLINE_WINDOW_MS = 2 * 60_000;
@@ -20,8 +18,13 @@ export type AdminPresence = {
   lastActiveMs: number | null;
 };
 
-const beat = (uid: string, online: boolean) =>
-  setDoc(doc(db, 'users', uid), { online, lastActive: serverTimestamp() }, { merge: true });
+async function beat(uid: string, online: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ online, last_active: new Date().toISOString() })
+    .eq('id', uid);
+  if (error) throw error;
+}
 
 const warn = (err: unknown) => console.warn('[presence]', err);
 
@@ -60,30 +63,43 @@ export function startAdminPresence(uid: string): () => void {
 }
 
 export function subscribeToAdmins(cb: (admins: AdminPresence[]) => void): () => void {
-  return onSnapshot(
-    query(collection(db, 'users'), where('role', '==', 'admin')),
-    (snap) =>
-      cb(
-        snap.docs.map((d) => {
-          const data = d.data() as any;
-          const email: string = data.email ?? '';
-          return {
-            uid: d.id,
-            name: data.name ?? data.displayName ?? (email ? email.split('@')[0] : 'Admin'),
-            email,
-            online: data.online === true,
-            lastActiveMs: data.lastActive?.toMillis?.() ?? null,
-          };
-        })
-      ),
-    (err) => {
-      warn(err);
+  let active = true;
+
+  const load = async () => {
+    const { data, error } = await supabase.from('profiles').select('*').eq('role', 'admin');
+    if (!active) return;
+    if (error) {
+      warn(error);
       cb([]);
+      return;
     }
-  );
+    cb(
+      (data ?? []).map((row: any) => {
+        const email: string = row.email ?? '';
+        return {
+          uid: row.id,
+          name: row.display_name ?? (email ? email.split('@')[0] : 'Admin'),
+          email,
+          online: row.online === true,
+          lastActiveMs: row.last_active ? Date.parse(row.last_active) : null,
+        };
+      })
+    );
+  };
+  load();
+
+  const channel = supabase
+    .channel(`admins:${Math.random().toString(36).slice(2)}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, load)
+    .subscribe();
+
+  return () => {
+    active = false;
+    supabase.removeChannel(channel);
+  };
 }
 
-/** A null lastActive means our own heartbeat write is still pending, so treat it as fresh. */
+/** A null lastActive means no heartbeat has landed yet, so treat it as fresh. */
 export const isAdminOnline = (a: AdminPresence, now: number) =>
   a.online && (a.lastActiveMs === null || now - a.lastActiveMs < ONLINE_WINDOW_MS);
 

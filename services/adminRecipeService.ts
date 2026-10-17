@@ -1,64 +1,63 @@
 // services/adminRecipeService.ts
-// Write access for admin/CMS use only. Firestore Security Rules must restrict
-// these operations to authenticated admin users — this file does not enforce that.
+// Write access for admin/CMS use. These calls only succeed for users whose
+// profile role is 'admin' — that is enforced by Row Level Security in the
+// database, not by this file.
 
-import {
-  collection,
-  doc,
-  addDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  getDocs,
-  getDoc,
-  orderBy,
-  query,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { db } from '../lib/firebaseClient';
+import { supabase } from '../lib/supabase';
+import { toRecipe, fromRecipe, type RichRecipe } from '../lib/recipeMapper';
 import type { Recipe } from '../types';
 import { MOCK_RECIPES } from '../constants/mockRecipes';
 
-const RECIPES_COLLECTION = 'recipes';
-
 // Admins need to see drafts too, so this does NOT filter by status.
 export async function getAllRecipesForAdmin(): Promise<Recipe[]> {
-  const q = query(collection(db, RECIPES_COLLECTION), orderBy('updatedAt', 'desc'));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Recipe));
+  const { data, error } = await supabase
+    .from('recipes')
+    .select('*')
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(toRecipe);
 }
 
 export async function getRecipeForAdmin(id: string): Promise<Recipe | null> {
-  const snap = await getDoc(doc(db, RECIPES_COLLECTION, id));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as Recipe;
+  const { data, error } = await supabase.from('recipes').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? toRecipe(data) : null;
 }
 
-export async function createRecipe(data: Omit<Recipe, 'id'>): Promise<string> {
-  const ref = await addDoc(collection(db, RECIPES_COLLECTION), {
-    ...data,
-    updatedAt: serverTimestamp(),
-  });
-  return ref.id;
+export async function createRecipe(data: Partial<RichRecipe>): Promise<string> {
+  const { data: session } = await supabase.auth.getSession();
+  const row = fromRecipe(data);
+  if (row.created_by_admin_id === undefined && session.session) {
+    row.created_by_admin_id = session.session.user.id;
+  }
+  const { data: created, error } = await supabase.from('recipes').insert(row).select('id').single();
+  if (error) throw error;
+  return created.id as string;
 }
 
-export async function updateRecipe(id: string, data: Partial<Recipe>): Promise<void> {
-  await updateDoc(doc(db, RECIPES_COLLECTION, id), {
-    ...data,
-    updatedAt: serverTimestamp(),
-  });
+export async function updateRecipe(id: string, data: Partial<RichRecipe>): Promise<void> {
+  // updated_at is set by a database trigger.
+  const { data: rows, error } = await supabase
+    .from('recipes')
+    .update(fromRecipe(data))
+    .eq('id', id)
+    .select('id');
+  if (error) throw error;
+  if (!rows || rows.length === 0) {
+    throw new Error('Recipe not found, or you do not have permission to edit it.');
+  }
 }
 
 export async function deleteRecipe(id: string): Promise<void> {
-  await deleteDoc(doc(db, RECIPES_COLLECTION, id));
+  const { error } = await supabase.from('recipes').delete().eq('id', id);
+  if (error) throw error;
 }
 
 /**
  * Picks up a local image URI (from expo-image-picker) and uploads it to
  * Cloudinary via an unsigned upload preset — no server/API key needed on the
  * client, and Cloudinary's free tier is generous enough for this app's needs
- * (this project intentionally does NOT use Firebase Storage, which is billed
- * separately and isn't part of the free Spark plan).
+ * (this project doesn't use a separate storage service for images).
  *
  * NOTE: this deliberately uses XMLHttpRequest instead of fetch(). React
  * Native's FormData accepts a special { uri, type, name } object to describe
@@ -106,53 +105,46 @@ export async function uploadRecipeImage(localUri: string): Promise<string> {
 }
 
 /**
- * One-time helper: copies the bundled MOCK_RECIPES into real Firestore
- * documents so they become visible/editable in the admin panel, and so the
- * user-facing app is reading live data instead of the mock fallback.
+ * One-time helper: copies the bundled MOCK_RECIPES into real database rows so
+ * they become visible/editable in the admin panel, and so the user-facing app
+ * is reading live data instead of the mock fallback.
  *
- * IMPORTANT: this writes each recipe using its own MOCK_RECIPES id as the
- * Firestore document ID (via setDoc), rather than letting Firestore
- * auto-generate a new one. This keeps a single, stable id per recipe across
- * both data sources — so a favorite saved while offline/on mock data still
- * resolves to the exact same Firestore document once it's seeded, instead of
- * getRecipeById() silently falling back to the mock copy (which is what
- * caused seeded recipes to display their bundled local image in Favorites
- * but a blank image on Home/Search, since those were actually two different
- * records under two different ids).
+ * Each recipe keeps its own MOCK_RECIPES id as its row id, so there is a single
+ * stable id per recipe across both data sources — a favorite saved while
+ * offline/on mock data still resolves to the exact same row once it's seeded.
  *
- * Running this again is safe: existing docs are left untouched (no
+ * Running this again is safe: existing rows are left untouched (no
  * duplicates), only missing ones are created.
  *
  * Note: any recipe whose heroImageUrl is a local require() (not a plain
- * string URL) can't be carried over as-is — Firestore needs a string, not a
+ * string URL) can't be carried over as-is — the database needs a string, not a
  * bundler asset reference. Those recipes are created with an empty photo;
  * re-add the photo afterward via the normal Edit Recipe screen.
  */
 export async function seedMockRecipes(): Promise<{ created: number; skippedImages: number; alreadyExisted: number }> {
-  let created = 0;
+  const ids = MOCK_RECIPES.map((r) => r.id);
+  const { data: existing, error: existingError } = await supabase
+    .from('recipes')
+    .select('id')
+    .in('id', ids);
+  if (existingError) throw existingError;
+
+  const existingIds = new Set((existing ?? []).map((r: { id: string }) => r.id));
   let skippedImages = 0;
-  let alreadyExisted = 0;
 
-  for (const recipe of MOCK_RECIPES) {
-    const { id, heroImageUrl, ...rest } = recipe;
-    const ref = doc(db, RECIPES_COLLECTION, id);
-
-    const existing = await getDoc(ref);
-    if (existing.exists()) {
-      alreadyExisted++;
-      continue;
-    }
-
-    const isLocalAsset = typeof heroImageUrl !== 'string';
+  const rows = MOCK_RECIPES.filter((r) => !existingIds.has(r.id)).map((recipe) => {
+    const isLocalAsset = typeof recipe.heroImageUrl !== 'string';
     if (isLocalAsset) skippedImages++;
+    return {
+      ...fromRecipe({ ...recipe, heroImageUrl: isLocalAsset ? '' : recipe.heroImageUrl }),
+      id: recipe.id,
+    };
+  });
 
-    await setDoc(ref, {
-      ...rest,
-      heroImageUrl: isLocalAsset ? '' : heroImageUrl,
-      updatedAt: serverTimestamp(),
-    });
-    created++;
+  if (rows.length > 0) {
+    const { error } = await supabase.from('recipes').insert(rows);
+    if (error) throw error;
   }
 
-  return { created, skippedImages, alreadyExisted };
+  return { created: rows.length, skippedImages, alreadyExisted: existingIds.size };
 }

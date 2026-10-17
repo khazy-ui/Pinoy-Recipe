@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react';
 import { View, ScrollView, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { onAuthStateChanged, type User } from 'firebase/auth';
-import { auth } from '../../lib/firebaseClient';
+import { useAuthUser } from '../../hooks/useAuthUser';
 import { useMyNotifications } from '../../hooks/useMyNotifications';
 import ScreenHeader from '../../components/ScreenHeader';
 import ThemedBackground from '../../components/ThemedBackground';
@@ -13,10 +12,9 @@ import { ResponsiveText as Text } from '../../components/ResponsiveText';
 export default function NotificationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(auth.currentUser);
-  const { items, loading } = useMyNotifications(user?.uid);
+  const { user } = useAuthUser();
+  const { items, loading } = useMyNotifications(user?.id);
 
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
 
   const notification = items.find((n) => n.id === id) ?? null;
 

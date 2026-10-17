@@ -1,8 +1,8 @@
 // hooks/useRecipeSearch.ts
 import { useMemo, useState, useDeferredValue } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../lib/firebaseClient';
+import { supabase } from '../lib/supabase';
+import { toRecipe } from '../lib/recipeMapper';
 import { MOCK_RECIPES } from '../constants/mockRecipes';
 import type { Recipe, SearchFilters, Region, MealType, DietaryTag } from '../types';
 
@@ -30,15 +30,11 @@ export function useRecipeSearch() {
     queryKey: ['recipe-search-index'],
     queryFn: async () => {
       try {
-        // Security rules only allow reading published recipes, and Firestore rejects any
-        // query that could return others, so the status filter must be part of the query.
-        const snap = await getDocs(query(collection(db, 'recipes'), where('status', '==', 'published')));
-        const published = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() } as Recipe))
-          .filter((r) => r.status === 'published');
+        const { data, error } = await supabase.from('recipes').select('*').eq('status', 'published');
+        if (error) throw error;
         // Empty means the admin has no published recipes; only fall back to the
-        // built-in samples if Firestore itself can't be reached (see catch below).
-        return published;
+        // built-in samples if the database itself can't be reached (see catch below).
+        return (data ?? []).map(toRecipe) as Recipe[];
       } catch (err) {
         console.warn('[useRecipeSearch] Falling back to built-in recipe content:', err);
         return MOCK_RECIPES;
