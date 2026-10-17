@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../components/ResponsiveText';
 import { Stack } from 'expo-router';
-import { onAuthStateChanged, type User } from 'firebase/auth';
-import { auth } from '../lib/firebaseClient';
+import { displayNameOf } from '../lib/userProfile';
+import { useAuthUser } from '../hooks/useAuthUser';
 import ScreenHeader from '../components/ScreenHeader';
 import ThemedBackground from '../components/ThemedBackground';
 import {
@@ -27,12 +27,11 @@ const CATEGORIES = Object.keys(CATEGORY_LABELS) as FeedbackCategory[];
 const MIN_LENGTH = 10;
 
 export default function FeedbackScreen() {
-  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const { user } = useAuthUser();
   const [category, setCategory] = useState<FeedbackCategory>('suggestion');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
 
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
 
   const tooShort = message.trim().length < MIN_LENGTH;
 
@@ -50,9 +49,9 @@ export default function FeedbackScreen() {
     setSending(true);
     try {
       await submitFeedback({
-        userId: user.uid,
+        userId: user.id,
         userEmail: user.email ?? '',
-        userName: user.displayName || user.email?.split('@')[0] || 'Chef',
+        userName: displayNameOf(user) || user.email?.split('@')[0] || 'Chef',
         category,
         message,
       });

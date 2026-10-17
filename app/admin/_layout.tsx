@@ -2,17 +2,16 @@
 //
 // Client-side convenience guard: keeps non-admins out of the /admin screens
 // and bounces them back to the regular app. This is a UX nicety only — the
-// real enforcement must be Firestore Security Rules, since a client check can
-// always be bypassed.
+// real enforcement is Row Level Security in the database, since a client check
+// can always be bypassed.
 //
 // Bottom tab bar: Add Recipe, User Feedback, Send Notification, Profile.
 // recipe-form is a real route but is hidden from the tab bar via `href: null`.
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
-import { onAuthStateChanged } from 'firebase/auth';
 import { ChefHat, MessageSquare, BellRing, User } from 'lucide-react-native';
-import { auth } from '../../lib/firebaseClient';
+import { useAuthUser } from '../../hooks/useAuthUser';
 import { ensureUserProfile } from '../../lib/userProfile';
 import { subscribeToAllFeedback } from '../../services/feedbackService';
 import { startAdminPresence } from '../../services/presenceService';
@@ -27,13 +26,17 @@ export default function AdminLayout() {
   const [allowed, setAllowed] = useState(false);
   const [newFeedbackCount, setNewFeedbackCount] = useState(0);
 
+  const { user, loading } = useAuthUser();
+
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.replace('/login');
-        return;
-      }
-      const profile = await ensureUserProfile(user.uid, user.email, user.displayName);
+    if (loading) return;
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
+    let cancelled = false;
+    ensureUserProfile(user).then((profile) => {
+      if (cancelled) return;
       if (profile.role !== 'admin') {
         router.replace('/(tabs)');
         return;
@@ -41,8 +44,10 @@ export default function AdminLayout() {
       setAllowed(true);
       setChecking(false);
     });
-    return unsub;
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, loading]);
 
   // Badges the "User Feedback" tab icon with the count of unread feedback.
   useEffect(() => {
@@ -54,9 +59,9 @@ export default function AdminLayout() {
 
   // Keeps this admin's online status fresh for the admin list on the Profile tab.
   useEffect(() => {
-    if (!allowed || !auth.currentUser) return;
-    return startAdminPresence(auth.currentUser.uid);
-  }, [allowed]);
+    if (!allowed || !user) return;
+    return startAdminPresence(user.id);
+  }, [allowed, user?.id]);
 
   if (checking || !allowed) {
     return (

@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 import { View, Pressable, Switch, Alert, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
 import { ChevronRight, LogOut, Moon, Info, UserCircle2, MessageSquare, Lock } from 'lucide-react-native';
-import { auth, db } from '../../lib/firebaseClient';
+import { supabase } from '../../lib/supabase';
+import { useAuthUser } from '../../hooks/useAuthUser';
+import { displayNameOf } from '../../lib/userProfile';
+import { subscribeToCookedCount } from '../../services/cookedRecipeService';
 import { canChangePassword } from '../../services/passwordService';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useThemeStore } from '../../store/useThemeStore';
@@ -15,13 +16,11 @@ import { ResponsiveText as Text } from '../../components/ResponsiveText';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const { user } = useAuthUser();
   const [cookedRecipeCount, setCookedRecipeCount] = useState(0);
   const isDark = useThemeStore((s) => s.isDark);
   const toggleDark = useThemeStore((s) => s.toggleDark);
   const favoritesCount = useFavoritesStore((s) => s.favoriteIds.length);
-
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
 
   useEffect(() => {
     if (!user) {
@@ -29,18 +28,15 @@ export default function ProfileScreen() {
       return;
     }
 
-    return onSnapshot(
-      doc(db, 'users', user.uid),
-      (snapshot) => {
-        const count = snapshot.data()?.cookedRecipeCount;
-        setCookedRecipeCount(typeof count === 'number' && Number.isFinite(count) ? count : 0);
-      },
+    return subscribeToCookedCount(
+      user.id,
+      setCookedRecipeCount,
       (error) => {
         console.error('[ProfileScreen] Could not load cooked recipe count:', error);
         Alert.alert("Couldn't load cooking progress", 'Please try again later.');
       }
     );
-  }, [user?.uid]);
+  }, [user?.id]);
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -49,21 +45,21 @@ export default function ProfileScreen() {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          await signOut(auth);
+          await supabase.auth.signOut();
           router.replace('/login');
         },
       },
     ]);
   };
 
-  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Chef';
+  const displayName = displayNameOf(user) || user?.email?.split('@')[0] || 'Chef';
 
   return (
     <ThemedBackground>
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
         <View className="items-center mt-4 mb-6">
-          {user?.photoURL ? (
-            <Image source={{ uri: user.photoURL }} style={{ width: 88, height: 88, borderRadius: 44 }} />
+          {user?.user_metadata?.avatar_url ? (
+            <Image source={{ uri: user.user_metadata.avatar_url }} style={{ width: 88, height: 88, borderRadius: 44 }} />
           ) : (
             <UserCircle2 size={88} color="#D97706" />
           )}

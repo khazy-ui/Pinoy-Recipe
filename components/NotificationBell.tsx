@@ -2,9 +2,8 @@
 import { useEffect, useState } from 'react';
 import { View, Pressable, Modal, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { onAuthStateChanged, type User } from 'firebase/auth';
 import { Bell } from 'lucide-react-native';
-import { auth } from '../lib/firebaseClient';
+import { useAuthUser } from '../hooks/useAuthUser';
 import { useMyNotifications } from '../hooks/useMyNotifications';
 import { useThemeStore } from '../store/useThemeStore';
 import { markNotificationRead, formatWhen, type AppNotification } from '../services/feedbackService';
@@ -15,13 +14,12 @@ const PREVIEW_COUNT = 6;
 
 export default function NotificationBell() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const { user } = useAuthUser();
   const [open, setOpen] = useState(false);
-  const { items, unreadCount } = useMyNotifications(user?.uid);
+  const { items, unreadCount } = useMyNotifications(user?.id);
   const isDark = useThemeStore((s) => s.isDark);
   const iconColor = isDark ? '#F5EBDD' : '#3A2A1A';
 
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
 
   const handleItemPress = (n: AppNotification) => {
     setOpen(false);

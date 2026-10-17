@@ -1,7 +1,7 @@
 // app/login.tsx
 //
 // A single login screen for everyone. After a successful sign-in with
-// email/password, we look up the user's profile in Firestore (creating it on
+// email/password, we look up the user's profile in the database (creating it on
 // first sign-in) and route based on `role`: admins land on /admin, everyone
 // else lands on the regular app at /(tabs).
 import { useEffect, useMemo, useState } from 'react';
@@ -19,14 +19,10 @@ import {
 import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../components/ResponsiveText';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
-  type User,
-} from 'firebase/auth';
-import { auth } from '../lib/firebaseClient';
+import * as Linking from 'expo-linking';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
+import { useAuthUser } from '../hooks/useAuthUser';
 import { ensureUserProfile } from '../lib/userProfile';
 import { Eye, EyeOff } from 'lucide-react-native';
 
@@ -43,7 +39,7 @@ type Strength = {
 };
 
 // Scores a password on length and character variety. Shown only while
-// creating an account. Firebase itself only enforces a 6-character minimum.
+// creating an account. The server only enforces a short minimum length.
 function getPasswordStrength(pw: string): Strength {
   const hasCase = /[a-z]/.test(pw) && /[A-Z]/.test(pw);
   const hasNumber = /\d/.test(pw);
@@ -73,29 +69,33 @@ function getPasswordStrength(pw: string): Strength {
   return { level: 'strong', label: 'Strong', color: '#16A34A', bars: 3, tip };
 }
 
-// Maps Firebase Auth error codes to plain-language messages. Modern Firebase
-// SDKs return 'auth/invalid-credential' for BOTH a wrong password and an
-// unregistered email (a deliberate security choice, to avoid letting an
-// attacker tell which emails are registered) — so both are handled the same
-// user-facing way here.
-function getAuthErrorMessage(code: string | undefined, mode: Mode): string {
-  switch (code) {
-    case 'auth/invalid-credential':
-    case 'auth/wrong-password':
-    case 'auth/user-not-found':
+// Maps Supabase Auth error codes to plain-language messages. A wrong password
+// and an unregistered email both come back as 'invalid_credentials' (a
+// deliberate security choice, so attackers can't tell which emails exist),
+// so both are handled the same user-facing way here.
+function getAuthErrorMessage(err: any, mode: Mode): string {
+  if (err?.name === 'AuthRetryableFetchError' || /network request failed/i.test(err?.message ?? '')) {
+    return 'Network error. Check your connection and try again.';
+  }
+  switch (err?.code as string | undefined) {
+    case 'invalid_credentials':
+    case 'user_not_found':
       return 'The email or password you entered is incorrect. Please try again.';
-    case 'auth/invalid-email':
+    case 'email_address_invalid':
+    case 'validation_failed':
       return 'Please enter a valid email address.';
-    case 'auth/too-many-requests':
+    case 'over_request_rate_limit':
+    case 'over_email_send_rate_limit':
       return 'Too many attempts. Please wait a moment and try again.';
-    case 'auth/user-disabled':
+    case 'user_banned':
       return 'This account has been disabled. Contact support if you think this is a mistake.';
-    case 'auth/email-already-in-use':
+    case 'email_not_confirmed':
+      return 'Please confirm your email first. Check your inbox for the confirmation link.';
+    case 'user_already_exists':
+    case 'email_exists':
       return 'An account with this email already exists. Try signing in instead.';
-    case 'auth/weak-password':
+    case 'weak_password':
       return 'Please choose a stronger password (at least 6 characters).';
-    case 'auth/network-request-failed':
-      return 'Network error. Check your connection and try again.';
     default:
       return mode === 'signIn'
         ? 'Unable to sign in. Please try again.'
@@ -115,20 +115,21 @@ export default function LoginScreen() {
 
   // Send a signed-in user to the right place based on their role.
   const routeByRole = async (user: User) => {
-    const profile = await ensureUserProfile(user.uid, user.email, user.displayName);
+    const profile = await ensureUserProfile(user);
     router.replace(profile.role === 'admin' ? '/admin' : '/(tabs)');
   };
 
   // Already signed in from a previous session? Skip straight past login.
+  // Runs once, when the saved session has finished loading.
+  const { user: savedUser, loading: sessionLoading } = useAuthUser();
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        await routeByRole(user);
-      }
+    if (sessionLoading) return;
+    if (savedUser) {
+      routeByRole(savedUser).finally(() => setCheckingSession(false));
+    } else {
       setCheckingSession(false);
-    });
-    return unsub;
-  }, []);
+    }
+  }, [sessionLoading]);
 
   const strength = useMemo(() => getPasswordStrength(password), [password]);
 
@@ -139,7 +140,11 @@ export default function LoginScreen() {
     }
     setBusy(true);
     try {
-      await sendPasswordResetEmail(auth, email.trim());
+      // The emailed link opens the app on the reset-password screen.
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: Linking.createURL('/reset-password'),
+      });
+      if (error) throw error;
       // Same message whether or not the account exists, so emails can't be probed.
       Alert.alert(
         'Check your email',
@@ -148,11 +153,11 @@ export default function LoginScreen() {
     } catch (err: any) {
       const code = err?.code as string | undefined;
       const message =
-        code === 'auth/invalid-email'
+        code === 'email_address_invalid' || code === 'validation_failed'
           ? 'Please enter a valid email address.'
-          : code === 'auth/too-many-requests'
+          : code === 'over_request_rate_limit' || code === 'over_email_send_rate_limit'
           ? 'Too many attempts. Please wait a moment and try again.'
-          : code === 'auth/network-request-failed'
+          : err?.name === 'AuthRetryableFetchError'
           ? 'Network error. Check your connection and try again.'
           : 'Unable to send the reset email. Please try again.';
       Alert.alert('Reset failed', message);
@@ -168,13 +173,36 @@ export default function LoginScreen() {
     }
     setBusy(true);
     try {
-      const cred =
-        mode === 'signIn'
-          ? await signInWithEmailAndPassword(auth, email.trim(), password)
-          : await createUserWithEmailAndPassword(auth, email.trim(), password);
-      await routeByRole(cred.user);
+      if (mode === 'signIn') {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (error) throw error;
+        await routeByRole(data.user);
+      } else {
+        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+        if (error) throw error;
+        // With email confirmation on, an already-registered email comes back as a
+        // fake user with no identities instead of an error.
+        if (data.user && data.user.identities?.length === 0) {
+          Alert.alert('Account exists', 'An account with this email already exists. Try signing in instead.');
+          setMode('signIn');
+          return;
+        }
+        // No session yet means the project requires email confirmation first.
+        if (!data.session || !data.user) {
+          Alert.alert(
+            'Confirm your email',
+            `We sent a confirmation link to ${email.trim()}. Open it, then sign in.`
+          );
+          setMode('signIn');
+          return;
+        }
+        await routeByRole(data.user);
+      }
     } catch (err: any) {
-      Alert.alert('Sign-in failed', getAuthErrorMessage(err?.code, mode));
+      Alert.alert('Sign-in failed', getAuthErrorMessage(err, mode));
     } finally {
       setBusy(false);
     }

@@ -1,68 +1,64 @@
 // lib/userProfile.ts
 //
-// Resolves the signed-in user's app profile (users/{uid}), creating it on
-// first sign-in if it doesn't exist yet. `role` is what drives the
-// admin-vs-user redirect right after login.
+// Resolves the signed-in user's app profile (public.profiles row), creating it
+// if it is somehow missing. `role` drives the admin-vs-user redirect after login.
 //
-// NOTE (security): this client-side role is convenient for routing/UX only.
-// The real access control must live in Firestore Security Rules (and/or
-// Firebase custom claims) — never trust this value for anything sensitive.
-// To promote an account to admin, either set role: 'admin' on its users/{uid}
-// document in the Firebase console, or list its email in
-// EXPO_PUBLIC_ADMIN_EMAILS so it's granted admin on first sign-in.
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from './firebaseClient';
+// NOTE (security): this client-side role is for routing/UX only. The real
+// access control is enforced by Row Level Security in the database
+// (see supabase/migrations). To make someone an admin, run in the SQL editor:
+//   update public.profiles set role = 'admin' where email = 'them@example.com';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 import type { UserProfile } from '../types';
 
-const ADMIN_EMAILS = (process.env.EXPO_PUBLIC_ADMIN_EMAILS ?? '')
-  .split(',')
-  .map((e: string) => e.trim().toLowerCase())
-  .filter(Boolean);
+/** Display name stored in the user's auth metadata ('' when none). */
+export const displayNameOf = (user: User | null | undefined): string =>
+  (user?.user_metadata?.display_name ||
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    '') as string;
 
-export async function ensureUserProfile(
-  uid: string,
-  email?: string | null,
-  displayName?: string | null
-): Promise<UserProfile> {
-  const ref = doc(db, 'users', uid);
-  const role: UserProfile['role'] =
-    email && ADMIN_EMAILS.includes(email.toLowerCase()) ? 'admin' : 'user';
+const rowToProfile = (row: any): UserProfile => ({
+  uid: row.id,
+  email: row.email ?? undefined,
+  displayName: row.display_name ?? undefined,
+  role: row.role === 'admin' ? 'admin' : 'user',
+  favoriteRecipeIds: row.favorite_recipe_ids ?? [],
+  cookedRecipeCount: row.cooked_recipe_count ?? 0,
+  createdAt: row.created_at,
+});
+
+export async function ensureUserProfile(user: User): Promise<UserProfile> {
+  const email = user.email ?? undefined;
+  const displayName = displayNameOf(user) || undefined;
 
   try {
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      return {
-        uid,
-        favoriteRecipeIds: [],
-        cookedRecipeCount: 0,
-        ...(snap.data() as Partial<UserProfile>),
-      } as UserProfile;
-    }
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    if (error) throw error;
+    if (data) return rowToProfile(data);
 
-    const profile: UserProfile = {
-    uid,
-    ...(email ? { email } : {}),
-    ...(displayName ? { displayName } : {}),
-    role,
-    favoriteRecipeIds: [],
-    cookedRecipeCount: 0,
-    createdAt: new Date().toISOString(),
-  };
-  await setDoc(ref, profile);
-  return profile;
+    // Normally a database trigger creates the row at sign-up. If it's missing
+    // (e.g. an account created before the trigger existed), create it now.
+    // RLS only allows role = 'user' here, so nobody can self-promote.
+    const { data: created, error: insertError } = await supabase
+      .from('profiles')
+      .insert({ id: user.id, email: email ?? null, display_name: displayName ?? null, role: 'user' })
+      .select('*')
+      .single();
+    if (insertError) throw insertError;
+    return rowToProfile(created);
   } catch (err: unknown) {
-    // Firestore unreachable (offline / not configured yet) — fall back to a
-    // local-only profile so login still works; it'll sync next time online.
-    console.warn('[userProfile] Could not read/create Firestore profile, using local fallback:', err);
-    const fallback: UserProfile = {
-      uid,
-      email: email ?? undefined,
-      displayName: displayName ?? undefined,
-      role,
+    // Database unreachable (offline / not configured) — fall back to a local-only
+    // profile so login still works. It always uses the safe 'user' role.
+    console.warn('[userProfile] Could not read/create profile, using local fallback:', err);
+    return {
+      uid: user.id,
+      email,
+      displayName,
+      role: 'user',
       favoriteRecipeIds: [],
       cookedRecipeCount: 0,
       createdAt: new Date().toISOString(),
     };
-    return fallback;
   }
 }

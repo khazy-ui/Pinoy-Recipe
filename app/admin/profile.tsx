@@ -9,9 +9,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTopInset } from '../../hooks/useTopInset';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { ChevronRight, Lock, LogOut, Moon, Info, UserCircle2 } from 'lucide-react-native';
-import { auth } from '../../lib/firebaseClient';
+import { supabase } from '../../lib/supabase';
+import { useAuthUser } from '../../hooks/useAuthUser';
+import { displayNameOf } from '../../lib/userProfile';
 import { getAllRecipesForAdmin } from '../../services/adminRecipeService';
 import { subscribeToAllFeedback } from '../../services/feedbackService';
 import {
@@ -30,7 +31,7 @@ export default function AdminProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const topInset = useTopInset();
-  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const { user } = useAuthUser();
   const [newFeedback, setNewFeedback] = useState(0);
   const [admins, setAdmins] = useState<AdminPresence[]>([]);
   const [now, setNow] = useState(Date.now());
@@ -42,7 +43,6 @@ export default function AdminProfileScreen() {
     queryFn: getAllRecipesForAdmin,
   });
 
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
   useEffect(
     () => subscribeToAllFeedback((list) => setNewFeedback(list.filter((f) => f.status === 'new').length)),
     []
@@ -69,15 +69,15 @@ export default function AdminProfileScreen() {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          if (user) await setAdminOffline(user.uid).catch(() => {});
-          await signOut(auth);
+          if (user) await setAdminOffline(user.id).catch(() => {});
+          await supabase.auth.signOut();
           router.replace('/login');
         },
       },
     ]);
   };
 
-  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Admin';
+  const displayName = displayNameOf(user) || user?.email?.split('@')[0] || 'Admin';
 
   return (
     <ThemedBackground>
@@ -86,8 +86,8 @@ export default function AdminProfileScreen() {
         contentContainerStyle={{ padding: 16, paddingTop: topInset + 16, paddingBottom: insets.bottom + 16 }}
       >
         <View className="items-center mt-4 mb-6">
-          {user?.photoURL ? (
-            <Image source={{ uri: user.photoURL }} style={{ width: 88, height: 88, borderRadius: 44 }} />
+          {user?.user_metadata?.avatar_url ? (
+            <Image source={{ uri: user.user_metadata.avatar_url }} style={{ width: 88, height: 88, borderRadius: 44 }} />
           ) : (
             <UserCircle2 size={88} color="#D97706" />
           )}
@@ -172,7 +172,7 @@ export default function AdminProfileScreen() {
           )}
           {sortedAdmins.map((a, i) => {
             const online = isAdminOnline(a, now);
-            const isYou = a.uid === user?.uid;
+            const isYou = a.uid === user?.id;
             return (
               <View key={a.uid}>
                 {i > 0 && <Divider />}

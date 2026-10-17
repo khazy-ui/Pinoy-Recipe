@@ -15,7 +15,7 @@ import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../com
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
-import { auth } from '../lib/firebaseClient';
+import { useAuthUser } from '../hooks/useAuthUser';
 import {
   canChangePassword,
   changePassword,
@@ -41,7 +41,8 @@ export default function ChangePasswordScreen() {
   const [busy, setBusy] = useState(false);
 
   const strength = passwordStrength(next);
-  const canChange = canChangePassword(auth.currentUser);
+  const { user: authUser } = useAuthUser();
+  const canChange = canChangePassword(authUser);
 
   const handleSubmit = async () => {
     const e: typeof errors = {};
@@ -88,7 +89,7 @@ export default function ChangePasswordScreen() {
             <View className="bg-white dark:bg-[#2A211A] rounded-2xl p-4">
               <Text className="text-[#3A2A1A] dark:text-[#F5EBDD] font-semibold mb-1">No password to change</Text>
               <Text className="text-sm text-[#8A6D4E] dark:text-[#B8A48C]">
-                You signed in with Google, so your password is managed by your Google account.
+                You signed in with a social account (such as Google), so your password is managed there.
               </Text>
             </View>
           ) : (

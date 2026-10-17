@@ -1,26 +1,9 @@
 // services/feedbackService.ts
 //
-// Firestore collections used:
-//   feedback/{id}       -> what users send in, plus the admin's reply/status
-//   notifications/{id}  -> what admins send back to a specific user
-//
-// NOTE: assumes `db` (getFirestore) is exported from lib/firebaseClient.
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-  writeBatch,
-  type QueryDocumentSnapshot,
-  type Unsubscribe,
-} from 'firebase/firestore';
-import { db } from '../lib/firebaseClient';
+// Postgres tables used:
+//   feedback       -> what users send in, plus the admin's reply/status
+//   notifications  -> what admins send back to a specific user
+import { supabase } from '../lib/supabase';
 
 /* ------------------------------------------------------------------ */
 /* Types & labels                                                      */
@@ -77,37 +60,32 @@ export const MAX_FEEDBACK_LENGTH = 1000;
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-// serverTimestamp() is null in local snapshots until the server confirms it.
-const toMs = (v: any): number => (v?.toMillis ? v.toMillis() : Date.now());
+type Unsubscribe = () => void;
 
-const mapFeedback = (d: QueryDocumentSnapshot): Feedback => {
-  const data = d.data();
-  return {
-    id: d.id,
-    userId: data.userId,
-    userEmail: data.userEmail ?? '',
-    userName: data.userName ?? 'Chef',
-    category: data.category,
-    message: data.message,
-    status: data.status ?? 'new',
-    createdAt: toMs(data.createdAt),
-    adminReply: data.adminReply ?? undefined,
-    repliedAt: data.repliedAt ? toMs(data.repliedAt) : undefined,
-  };
-};
+const toMs = (v: string | null | undefined): number => (v ? Date.parse(v) : Date.now());
 
-const mapNotification = (d: QueryDocumentSnapshot): AppNotification => {
-  const data = d.data();
-  return {
-    id: d.id,
-    userId: data.userId,
-    title: data.title,
-    body: data.body,
-    feedbackId: data.feedbackId ?? null,
-    read: !!data.read,
-    createdAt: toMs(data.createdAt),
-  };
-};
+const mapFeedback = (row: any): Feedback => ({
+  id: row.id,
+  userId: row.user_id,
+  userEmail: row.user_email ?? '',
+  userName: row.user_name ?? 'Chef',
+  category: row.category,
+  message: row.message,
+  status: row.status ?? 'new',
+  createdAt: toMs(row.created_at),
+  adminReply: row.admin_reply ?? undefined,
+  repliedAt: row.replied_at ? toMs(row.replied_at) : undefined,
+});
+
+const mapNotification = (row: any): AppNotification => ({
+  id: row.id,
+  userId: row.user_id,
+  title: row.title,
+  body: row.body,
+  feedbackId: row.feedback_id ?? null,
+  read: !!row.read,
+  createdAt: toMs(row.created_at),
+});
 
 export function formatWhen(ms: number): string {
   const d = new Date(ms);
@@ -120,6 +98,58 @@ export function formatWhen(ms: number): string {
 
 const logErr = (label: string) => (err: unknown) => console.warn(`[${label}]`, err);
 
+// Supabase calls return { error } instead of throwing; this keeps the old throw-on-failure behavior.
+function check(error: { message: string } | null) {
+  if (error) throw error;
+}
+
+// Large id lists are sent in chunks so the request URL stays short.
+const CHUNK = 100;
+const chunks = <T,>(items: T[], size = CHUNK): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+};
+
+/**
+ * Replaces Firestore's onSnapshot: loads the list once, then reloads it whenever
+ * the table changes. Row Level Security still filters every reload, so each user
+ * only ever receives rows they're allowed to see.
+ *
+ * Each subscription gets a unique channel name, because several screens can
+ * listen to the same table at the same time.
+ */
+function subscribeToTable<T>(
+  table: 'feedback' | 'notifications',
+  fetchList: () => Promise<T[]>,
+  cb: (list: T[]) => void,
+  label: string
+): Unsubscribe {
+  let active = true;
+
+  const load = async () => {
+    try {
+      const list = await fetchList();
+      if (active) cb(list);
+    } catch (err) {
+      logErr(label)(err);
+    }
+  };
+  load();
+
+  // No row filter on purpose: Supabase can't filter DELETE events, so a filter
+  // would leave the list stale after a delete. The reload below is filtered by RLS.
+  const channel = supabase
+    .channel(`${table}:${label}:${Math.random().toString(36).slice(2)}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table }, load)
+    .subscribe();
+
+  return () => {
+    active = false;
+    supabase.removeChannel(channel);
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* User side                                                           */
 /* ------------------------------------------------------------------ */
@@ -131,21 +161,31 @@ export async function submitFeedback(input: {
   category: FeedbackCategory;
   message: string;
 }) {
-  await addDoc(collection(db, 'feedback'), {
-    ...input,
+  const { error } = await supabase.from('feedback').insert({
+    user_id: input.userId,
+    user_email: input.userEmail,
+    user_name: input.userName,
+    category: input.category,
     message: input.message.trim(),
-    status: 'new' as FeedbackStatus,
-    createdAt: serverTimestamp(),
+    status: 'new',
   });
+  check(error);
 }
 
-// Sorted client-side so no composite Firestore index is required.
 export function subscribeToMyFeedback(uid: string, cb: (list: Feedback[]) => void): Unsubscribe {
-  const q = query(collection(db, 'feedback'), where('userId', '==', uid));
-  return onSnapshot(
-    q,
-    (snap) => cb(snap.docs.map(mapFeedback).sort((a, b) => b.createdAt - a.createdAt)),
-    logErr('subscribeToMyFeedback')
+  return subscribeToTable(
+    'feedback',
+    async () => {
+      const { data, error } = await supabase
+        .from('feedback')
+        .select('*')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false });
+      check(error);
+      return (data ?? []).map(mapFeedback);
+    },
+    cb,
+    'subscribeToMyFeedback'
   );
 }
 
@@ -153,36 +193,44 @@ export function subscribeToMyNotifications(
   uid: string,
   cb: (list: AppNotification[]) => void
 ): Unsubscribe {
-  const q = query(collection(db, 'notifications'), where('userId', '==', uid));
-  return onSnapshot(
-    q,
-    (snap) => cb(snap.docs.map(mapNotification).sort((a, b) => b.createdAt - a.createdAt)),
-    logErr('subscribeToMyNotifications')
+  return subscribeToTable(
+    'notifications',
+    async () => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false });
+      check(error);
+      return (data ?? []).map(mapNotification);
+    },
+    cb,
+    'subscribeToMyNotifications'
   );
 }
 
 export async function markNotificationRead(id: string) {
-  await updateDoc(doc(db, 'notifications', id), { read: true });
+  const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id);
+  check(error);
 }
 
 export async function deleteNotification(id: string) {
-  await deleteDoc(doc(db, 'notifications', id));
+  const { error } = await supabase.from('notifications').delete().eq('id', id);
+  check(error);
 }
 
 export async function deleteAllNotifications(ids: string[]) {
-  const CHUNK = 400; // a Firestore batch is limited to 500 operations
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const batch = writeBatch(db);
-    ids.slice(i, i + CHUNK).forEach((id) => batch.delete(doc(db, 'notifications', id)));
-    await batch.commit();
+  for (const part of chunks(ids)) {
+    const { error } = await supabase.from('notifications').delete().in('id', part);
+    check(error);
   }
 }
 
 export async function markAllNotificationsRead(ids: string[]) {
-  if (ids.length === 0) return;
-  const batch = writeBatch(db);
-  ids.forEach((id) => batch.update(doc(db, 'notifications', id), { read: true }));
-  await batch.commit();
+  for (const part of chunks(ids)) {
+    const { error } = await supabase.from('notifications').update({ read: true }).in('id', part);
+    check(error);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -190,40 +238,38 @@ export async function markAllNotificationsRead(ids: string[]) {
 /* ------------------------------------------------------------------ */
 
 export function subscribeToAllFeedback(cb: (list: Feedback[]) => void): Unsubscribe {
-  return onSnapshot(
-    collection(db, 'feedback'),
-    (snap) => cb(snap.docs.map(mapFeedback).sort((a, b) => b.createdAt - a.createdAt)),
-    logErr('subscribeToAllFeedback')
+  return subscribeToTable(
+    'feedback',
+    async () => {
+      const { data, error } = await supabase
+        .from('feedback')
+        .select('*')
+        .order('created_at', { ascending: false });
+      check(error);
+      return (data ?? []).map(mapFeedback);
+    },
+    cb,
+    'subscribeToAllFeedback'
   );
 }
 
 export async function updateFeedbackStatus(id: string, status: FeedbackStatus) {
-  await updateDoc(doc(db, 'feedback', id), { status });
+  const { error } = await supabase.from('feedback').update({ status }).eq('id', id);
+  check(error);
 }
 
 /**
  * Saves the admin's reply on the feedback AND creates a notification for the
- * user, in one atomic batch so they can never get out of sync.
+ * user. Done by one database function (reply_to_feedback) so both happen
+ * together or not at all, and only admins are allowed to call it.
  */
 export async function replyToFeedback(feedback: Feedback, reply: string, status: FeedbackStatus) {
-  const batch = writeBatch(db);
-
-  batch.update(doc(db, 'feedback', feedback.id), {
-    adminReply: reply,
-    repliedAt: serverTimestamp(),
-    status,
+  const { error } = await supabase.rpc('reply_to_feedback', {
+    p_id: feedback.id,
+    p_reply: reply,
+    p_status: status,
   });
-
-  batch.set(doc(collection(db, 'notifications')), {
-    userId: feedback.userId,
-    title: status === 'resolved' ? 'Your feedback was resolved' : 'Update on your feedback',
-    body: reply,
-    feedbackId: feedback.id,
-    read: false,
-    createdAt: serverTimestamp(),
-  });
-
-  await batch.commit();
+  check(error);
 }
 
 /* ------------------------------------------------------------------ */
@@ -238,16 +284,16 @@ export interface AppUser {
 }
 
 export async function getAllUsers(): Promise<AppUser[]> {
-  const snap = await getDocs(collection(db, 'users'));
-  return snap.docs
-    .map((d) => {
-      const x = d.data();
-      const email: string = x.email ?? '';
+  const { data, error } = await supabase.from('profiles').select('id, email, display_name, role');
+  check(error);
+  return (data ?? [])
+    .map((row: any) => {
+      const email: string = row.email ?? '';
       return {
-        uid: d.id,
+        uid: row.id,
         email,
-        name: x.displayName || x.name || email.split('@')[0] || 'User',
-        role: x.role ?? 'user',
+        name: row.display_name || email.split('@')[0] || 'User',
+        role: row.role ?? 'user',
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -255,23 +301,13 @@ export async function getAllUsers(): Promise<AppUser[]> {
 
 /**
  * Sends the same notification to one or many users. Each user gets their own
- * notification document, so read/unread is tracked per person. Writes are
- * chunked because a Firestore batch is limited to 500 operations.
+ * notification row, so read/unread is tracked per person.
  */
 export async function sendNotificationToUsers(uids: string[], title: string, body: string) {
-  const CHUNK = 400;
-  for (let i = 0; i < uids.length; i += CHUNK) {
-    const batch = writeBatch(db);
-    uids.slice(i, i + CHUNK).forEach((uid) => {
-      batch.set(doc(collection(db, 'notifications')), {
-        userId: uid,
-        title,
-        body,
-        feedbackId: null,
-        read: false,
-        createdAt: serverTimestamp(),
-      });
-    });
-    await batch.commit();
+  for (const part of chunks(uids, 500)) {
+    const { error } = await supabase.from('notifications').insert(
+      part.map((uid) => ({ user_id: uid, title, body, feedback_id: null, read: false }))
+    );
+    check(error);
   }
 }

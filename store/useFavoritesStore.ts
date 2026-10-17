@@ -2,8 +2,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { doc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../lib/firebaseClient';
+import { supabase } from '../lib/supabase';
+import { getCurrentUser } from '../hooks/useAuthUser';
 
 interface FavoritesStore {
   favoriteIds: string[];
@@ -13,10 +13,9 @@ interface FavoritesStore {
 }
 
 // Local-first: toggling favorites works fully offline via AsyncStorage,
-// then best-effort syncs to the user's profile doc in Firestore when online.
-// Writes here only ever touch the CURRENT user's own profile document
-// (users/{uid}.favoriteRecipeIds) — never recipe documents themselves,
-// which stay admin-write-only per the Security Rules.
+// then best-effort syncs to the user's own profile row (profiles.favorite_recipe_ids)
+// when online. Row Level Security only lets a user update their own profile, and
+// recipes stay admin-write-only.
 export const useFavoritesStore = create<FavoritesStore>()(
   persist(
     (set, get) => ({
@@ -30,16 +29,16 @@ export const useFavoritesStore = create<FavoritesStore>()(
 
         set({ favoriteIds: next });
 
-        const uid = auth.currentUser?.uid;
+        const uid = getCurrentUser()?.id;
         if (uid) {
-          setDoc(
-            doc(db, 'users', uid),
-            { favoriteRecipeIds: next },
-            { merge: true }
-          ).catch(() => {
-            // Swallow network errors — local state is already updated,
-            // and this will retry on next mutation or app foreground.
-          });
+          void (async () => {
+            try {
+              await supabase.from('profiles').update({ favorite_recipe_ids: next }).eq('id', uid);
+            } catch {
+              // Swallow network errors — local state is already updated,
+              // and this will retry on next mutation.
+            }
+          })();
         }
       },
 

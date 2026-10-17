@@ -1,15 +1,14 @@
 // services/passwordService.ts
-import {
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-  updatePassword,
-  type User,
-} from 'firebase/auth';
-import { auth } from '../lib/firebaseClient';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 
-/** Only email/password accounts have a password. Google sign-in accounts don't. */
+/** Only email/password accounts have a password. OAuth (e.g. Google) accounts don't. */
 export function canChangePassword(user: User | null): boolean {
-  return !!user?.email && user.providerData.some((p) => p.providerId === 'password');
+  if (!user?.email) return false;
+  return (
+    user.app_metadata?.provider === 'email' ||
+    !!user.identities?.some((i) => i.provider === 'email')
+  );
 }
 
 export function passwordStrength(pw: string): 0 | 1 | 2 | 3 | 4 {
@@ -31,31 +30,48 @@ export class PasswordChangeError extends Error {
   }
 }
 
+const isNetworkError = (err: any) =>
+  err?.name === 'AuthRetryableFetchError' || /network request failed/i.test(err?.message ?? '');
+
 /** Re-checks the current password, then sets the new one. Throws PasswordChangeError. */
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
-  const user = auth.currentUser;
-  if (!user || !user.email) {
+  const { data } = await supabase.auth.getSession();
+  const email = data.session?.user.email;
+  if (!email) {
     throw new PasswordChangeError('form', 'You need to be signed in to change your password.');
   }
-  try {
-    const credential = EmailAuthProvider.credential(user.email, currentPassword);
-    await reauthenticateWithCredential(user, credential);
-    await updatePassword(user, newPassword);
-  } catch (err: any) {
-    switch (err?.code) {
-      case 'auth/wrong-password':
-      case 'auth/invalid-credential':
-        throw new PasswordChangeError('current', "That current password isn't right.");
-      case 'auth/weak-password':
+
+  // Supabase has no "reauthenticate" call, so verify the current password by signing in again.
+  const { error: reauthError } = await supabase.auth.signInWithPassword({
+    email,
+    password: currentPassword,
+  });
+  if (reauthError) {
+    if (isNetworkError(reauthError)) {
+      throw new PasswordChangeError('form', "Couldn't connect. Check your internet and retry.");
+    }
+    if (reauthError.code === 'over_request_rate_limit') {
+      throw new PasswordChangeError('form', 'Too many attempts. Try again in a few minutes.');
+    }
+    throw new PasswordChangeError('current', "That current password isn't right.");
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) {
+    if (isNetworkError(error)) {
+      throw new PasswordChangeError('form', "Couldn't connect. Check your internet and retry.");
+    }
+    switch (error.code) {
+      case 'weak_password':
         throw new PasswordChangeError('next', 'Choose a stronger password.');
-      case 'auth/too-many-requests':
+      case 'same_password':
+        throw new PasswordChangeError('next', "Pick a password you haven't used before.");
+      case 'over_request_rate_limit':
         throw new PasswordChangeError('form', 'Too many attempts. Try again in a few minutes.');
-      case 'auth/requires-recent-login':
+      case 'reauthentication_needed':
         throw new PasswordChangeError('form', 'For your security, sign in again and retry.');
-      case 'auth/network-request-failed':
-        throw new PasswordChangeError('form', "Couldn't connect. Check your internet and retry.");
       default:
-        throw new PasswordChangeError('form', err?.message ?? "Couldn't update your password.");
+        throw new PasswordChangeError('form', error.message ?? "Couldn't update your password.");
     }
   }
 }
