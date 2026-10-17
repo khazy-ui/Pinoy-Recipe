@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthUser } from '../hooks/useAuthUser';
 import { ensureUserProfile } from '../lib/userProfile';
+import { needsAgreementsAcceptance } from '../lib/terms';
 import { useThemeStore } from '../store/useThemeStore'; // ensures theme rehydrates on launch
 import '../global.css';
 
@@ -50,6 +51,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     // recovery link signs the user in.
     const onResetScreen = segments[0] === 'reset-password';
     const onLoginScreen = segments[0] === 'login';
+    const onTermsScreen = segments[0] === 'terms';
 
     if (!user) {
       routedForUid.current = null;
@@ -60,6 +62,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
 
     if (onResetScreen) return;
+    if (needsAgreementsAcceptance(user)) {
+      if (!onTermsScreen) router.replace('/terms');
+      return;
+    }
     if (routedForUid.current === user.id) return;
     routedForUid.current = user.id;
 
@@ -99,6 +105,7 @@ export default function RootLayout() {
       <AuthGate>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" options={{ gestureEnabled: false }} />
+          <Stack.Screen name="terms" options={{ gestureEnabled: false }} />
           <Stack.Screen name="reset-password" options={{ gestureEnabled: false }} />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="admin" />

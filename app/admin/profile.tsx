@@ -92,7 +92,14 @@ export default function AdminProfileScreen() {
             <UserCircle2 size={88} color="#D97706" />
           )}
           <Text className="text-xl font-bold text-[#3A2A1A] dark:text-[#F5EBDD] mt-3">{displayName}</Text>
-          {!!user?.email && <Text className="text-sm text-[#8A6D4E] dark:text-[#B8A48C]">{user.email}</Text>}
+          {!!user?.email && (
+            <Text
+              className="text-sm text-[#8A6D4E] dark:text-[#B8A48C]"
+              style={{ alignSelf: 'stretch', textAlign: 'center' }}
+            >
+              {user.email}
+            </Text>
+          )}
           <View className="bg-[#D97706] rounded-full px-3 py-1 mt-2">
             <Text className="text-white text-xs font-semibold">Admin</Text>
           </View>
@@ -152,9 +159,13 @@ export default function AdminProfileScreen() {
           <Pressable onPress={handleSignOut} className="flex-row items-center justify-between px-4 py-4">
             <View className="flex-row items-center gap-3">
               <LogOut size={18} color="#DC2626" />
-              <View>
+              <View className="flex-1">
                 <Text className="text-[#DC2626] font-medium">Sign Out</Text>
-                {!!user?.email && <Text className="text-xs text-[#8A6D4E] dark:text-[#B8A48C]">{user.email}</Text>}
+                {!!user?.email && (
+                  <Text className="text-xs text-[#8A6D4E] dark:text-[#B8A48C]" style={{ flexShrink: 1 }}>
+                    {user.email}
+                  </Text>
+                )}
               </View>
             </View>
           </Pressable>

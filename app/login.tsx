@@ -24,6 +24,11 @@ import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAuthUser } from '../hooks/useAuthUser';
 import { ensureUserProfile } from '../lib/userProfile';
+import {
+  needsAgreementsAcceptance,
+  PRIVACY_POLICY_VERSION,
+  TERMS_VERSION,
+} from '../lib/terms';
 import { Eye, EyeOff } from 'lucide-react-native';
 
 const LOGIN_BG = require('../assets/images/loginbg.jpg');
@@ -115,6 +120,10 @@ export default function LoginScreen() {
 
   // Send a signed-in user to the right place based on their role.
   const routeByRole = async (user: User) => {
+    if (needsAgreementsAcceptance(user)) {
+      router.replace('/terms');
+      return;
+    }
     const profile = await ensureUserProfile(user);
     router.replace(profile.role === 'admin' ? '/admin' : '/(tabs)');
   };
@@ -181,7 +190,16 @@ export default function LoginScreen() {
         if (error) throw error;
         await routeByRole(data.user);
       } else {
-        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: {
+              terms_version_required: TERMS_VERSION,
+              privacy_policy_version_required: PRIVACY_POLICY_VERSION,
+            },
+          },
+        });
         if (error) throw error;
         // With email confirmation on, an already-registered email comes back as a
         // fake user with no identities instead of an error.

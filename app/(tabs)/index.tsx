@@ -4,20 +4,26 @@ import { FlashList } from '@shopify/flash-list';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { getRecipeFeedPage, getFeaturedRecipes, getTrendingRecipes } from '../../services/recipeService';
+import {
+  getRecipeFeedPage,
+  getFeaturedRecipes,
+  getTrendingRecipes,
+  getRecipesByRegion,
+} from '../../services/recipeService';
 import { RecipeCard } from '../../components/recipe/RecipeCard';
 import { RecipeCardSkeleton } from '../../components/recipe/RecipeCardSkeleton';
 import { FeaturedCarousel } from '../../components/recipe/FeaturedCarousel';
 import { RegionChipRow } from '../../components/recipe/RegionChipRow';
 import ThemedBackground from '../../components/ThemedBackground';
 import NotificationBell from '../../components/NotificationBell';
-import type { Recipe } from '../../types';
+import type { Recipe, Region } from '../../types';
 import { ResponsiveText as Text } from '../../components/ResponsiveText';
 
 export default function HomeFeedScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState<Region>();
 
   const { data: featured, isLoading: loadingFeatured } = useQuery({
     queryKey: ['featured-recipes'],
@@ -32,8 +38,10 @@ export default function HomeFeedScreen() {
   });
 
   const { data: feedPage, isLoading: loadingFeed } = useQuery({
-    queryKey: ['recipe-feed', 'page-1'],
-    queryFn: () => getRecipeFeedPage(),
+    queryKey: ['recipe-feed', selectedRegion ?? 'all'],
+    queryFn: async () => ({
+      recipes: selectedRegion ? await getRecipesByRegion(selectedRegion) : (await getRecipeFeedPage()).recipes,
+    }),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -77,19 +85,22 @@ export default function HomeFeedScreen() {
               <NotificationBell />
             </View>
 
-            {!loadingFeatured && featured && featured.length > 0 && (
+            {!selectedRegion && !loadingFeatured && featured && featured.length > 0 && (
               <FeaturedCarousel recipes={featured} onPressRecipe={openRecipe} />
             )}
 
             <RegionChipRow
+              selectedRegion={selectedRegion}
               onSelectRegion={(region) =>
-                router.push({ pathname: '/search', params: { region } })
+                setSelectedRegion((current) => (current === region ? undefined : region))
               }
             />
 
-            {!loadingTrending && trending && trending.length > 0 && (
+            {(selectedRegion || (!loadingTrending && trending && trending.length > 0)) && (
               <View className="px-4 mt-2 mb-1">
-                <Text className="text-lg font-semibold text-[#3A2A1A] dark:text-[#F5EBDD]">Now Trending</Text>
+                <Text className="text-lg font-semibold text-[#3A2A1A] dark:text-[#F5EBDD]">
+                  {selectedRegion ? `Recipes from ${selectedRegion}` : 'Now Trending'}
+                </Text>
               </View>
             )}
           </View>
@@ -99,6 +110,13 @@ export default function HomeFeedScreen() {
             <RecipeCard recipe={item} onPress={() => openRecipe(item)} />
           </View>
         )}
+        ListEmptyComponent={
+          selectedRegion ? (
+            <Text className="px-4 py-6 text-center text-sm text-[#8A6D4E] dark:text-[#B8A48C]">
+              No recipes found for {selectedRegion} yet.
+            </Text>
+          ) : null
+        }
         contentContainerStyle={{ paddingBottom: 26 }}
       />
     </ThemedBackground>
