@@ -12,7 +12,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   version: '1.0.1',
   orientation: 'portrait',
-  icon: './assets/images/icon.png',
+  icon: './assets/images/icon.svg',
   userInterfaceStyle: 'light',
   plugins: [
     'expo-router',
@@ -20,7 +20,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-splash-screen',
       {
-        image: './assets/images/splash.png',
+        image: './assets/images/splash.svg',
         resizeMode: 'contain',
         backgroundColor: '#ffffff',
       },
@@ -32,11 +32,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: 'com.jyanb.pinoyrecipes',
     adaptiveIcon: {
-      foregroundImage: './assets/images/adaptive-icon.png',
+      foregroundImage: './assets/images/adaptive-icon.svg',
       backgroundColor: '#ffffff',
     },
   },
   web: {
-    favicon: './assets/images/favicon.png',
+    favicon: './assets/images/favicon.svg',
   },
 });
