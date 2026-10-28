@@ -9,7 +9,7 @@
 // - Reset link points at this site, not the mobile app scheme
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { ImageBackground, useWindowDimensions } from 'react-native';
+import { Image, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { User } from '@supabase/supabase-js';
 import { Eye, EyeOff } from 'lucide-react-native';
@@ -18,7 +18,8 @@ import { useAuthUser } from '../hooks/useAuthUser';
 import { ensureUserProfile } from '../lib/userProfile';
 import { needsAgreementsAcceptance } from '../lib/terms';
 
-const LOGIN_BG = require('../assets/images/loginbg.jpg');
+// Logo shown on the brand panel. Swap this for any SVG in assets/images.
+const LOGO = require('../assets/images/icon.svg');
 
 const COLORS = {
   amber: '#D97706',
@@ -57,6 +58,96 @@ function authErrorMessage(err: any): string {
     default:
       return 'Unable to sign in. Please try again.';
   }
+}
+
+
+// Builds a thin triangle (a sun ray) pointing out from the centre of a 1000x1000 canvas.
+function ray(angleDeg: number, halfWidthDeg: number, length: number): string {
+  const c = 500;
+  const pt = (deg: number) => {
+    const r = (deg * Math.PI) / 180;
+    return `${(c + length * Math.cos(r)).toFixed(1)},${(c + length * Math.sin(r)).toFixed(1)}`;
+  };
+  return `${c},${c} ${pt(angleDeg - halfWidthDeg)} ${pt(angleDeg + halfWidthDeg)}`;
+}
+
+const LONG_RAYS = Array.from({ length: 8 }, (_, i) => ray(i * 45 - 90, 6, 520));
+const SHORT_RAYS = Array.from({ length: 8 }, (_, i) => ray(i * 45 - 67.5, 4, 360));
+
+// Left-hand brand panel: vector sun rays behind the logo, flag-coloured waves along the bottom.
+function BrandPanel() {
+  return (
+    <div
+      style={{
+        flex: 1,
+        position: 'relative',
+        overflow: 'hidden',
+        minHeight: '100vh',
+        background: 'linear-gradient(180deg, #FFF6E6 0%, #FFE9C7 100%)',
+      }}
+    >
+      <svg
+        viewBox="0 0 1000 1000"
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: '40%',
+          width: '170%',
+          maxWidth: 1500,
+          transform: 'translate(-50%, -50%)',
+        }}
+      >
+        {LONG_RAYS.map((pts, i) => (
+          <polygon key={`l${i}`} points={pts} fill="#F5B800" opacity={0.18} />
+        ))}
+        {SHORT_RAYS.map((pts, i) => (
+          <polygon key={`s${i}`} points={pts} fill="#F5B800" opacity={0.11} />
+        ))}
+        <circle cx="500" cy="500" r="150" fill="#F5B800" opacity={0.16} />
+      </svg>
+
+      <div
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: '40%',
+          transform: 'translate(-50%, -50%)',
+          width: 'min(320px, 55%)',
+        }}
+      >
+        <Image source={LOGO} style={{ width: '100%', aspectRatio: 1 } as any} resizeMode="contain" />
+      </div>
+
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 'calc(40% + 190px)',
+          textAlign: 'center',
+          padding: '0 40px',
+          fontFamily: FONT,
+        }}
+      >
+        <div style={{ fontSize: 30, fontWeight: 700, color: '#0B2A6B' }}>Pinoy Recipes</div>
+        <div style={{ fontSize: 15, marginTop: 8, color: COLORS.muted }}>
+          Authentic Filipino recipes, managed in one place.
+        </div>
+      </div>
+
+      <svg
+        viewBox="0 0 800 200"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+        style={{ position: 'absolute', left: 0, bottom: 0, width: '100%', height: 190 }}
+      >
+        <path d="M0 70 C 180 20, 380 120, 800 40 L800 200 L0 200 Z" fill="#CE1126" />
+        <path d="M0 110 C 220 60, 440 160, 800 85 L800 200 L0 200 Z" fill="#0038A8" />
+        <path d="M0 150 C 240 110, 480 190, 800 130 L800 200 L0 200 Z" fill="#F5B800" />
+      </svg>
+    </div>
+  );
 }
 
 export default function LoginWeb() {
@@ -187,14 +278,7 @@ export default function LoginWeb() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: COLORS.page, fontFamily: FONT }}>
-      {showBrandPanel && (
-        <ImageBackground
-          source={LOGIN_BG}
-          style={{ flex: 1, minHeight: '100vh' as any }}
-          imageStyle={{ objectPosition: 'top center' } as any}
-          resizeMode="cover"
-        />
-      )}
+      {showBrandPanel && <BrandPanel />}
 
       <main
         style={{
