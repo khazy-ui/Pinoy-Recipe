@@ -365,10 +365,6 @@ export default function LoginWeb() {
               {busy ? 'Please wait…' : 'Sign in'}
             </button>
           </form>
-
-          <p style={{ margin: '24px 0 0', fontSize: 12, textAlign: 'center', color: COLORS.muted }}>
-            Looking for recipes? Download the Pinoy Recipes mobile app.
-          </p>
         </div>
       </main>
     </div>
