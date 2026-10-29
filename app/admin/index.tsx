@@ -97,18 +97,22 @@ export default function AdminRecipeListScreen() {
           ))}
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingBottom: 12 }}
+        >
           {RECIPE_CATEGORIES.map((category) => (
             <Pressable
               key={category}
               onPress={() => setSelectedCategory((current) => current === category ? undefined : category)}
-              className={`rounded-full border px-3 py-2 ${
+              className={`min-w-[96px] min-h-[40px] shrink-0 items-center justify-center rounded-xl border px-3 py-2 ${
                 selectedCategory === category
                   ? 'bg-[#D97706] border-[#D97706]'
                   : 'bg-white dark:bg-[#2A211A] border-[#F0E4D4] dark:border-[#3A2A1A]'
               }`}
             >
-              <Text className={`text-xs ${selectedCategory === category ? 'text-white' : 'text-[#3A2A1A] dark:text-[#F5EBDD]'}`}>
+              <Text className={`text-xs text-center ${selectedCategory === category ? 'text-white' : 'text-[#3A2A1A] dark:text-[#F5EBDD]'}`}>
                 {category}
               </Text>
             </Pressable>
