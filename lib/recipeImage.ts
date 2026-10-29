@@ -5,7 +5,7 @@
 // whose photo hasn't been re-added via Edit Recipe).
 //
 // heroImageUrl can be:
-//   - a real hosted URL string (Cloudinary) -> wrap as { uri }
+//   - a real hosted URL string (any https image link) -> wrap as { uri }
 //   - a local require()'d asset number      -> pass through as-is
 //   - an empty string ''                    -> treat as "no image"
 //   - undefined/null                        -> treat as "no image"

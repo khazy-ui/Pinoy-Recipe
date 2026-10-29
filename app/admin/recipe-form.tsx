@@ -3,14 +3,12 @@ import { useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import * as ImagePicker from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react-native';
 import {
   createRecipe,
   updateRecipe,
   getRecipeForAdmin,
-  uploadRecipeImage,
 } from '../../services/adminRecipeService';
 import { notifyAllUsersNewRecipe } from '../../services/recipeNotifications';
 import { useThemeStore } from '../../store/useThemeStore';
@@ -188,21 +186,6 @@ export default function RecipeFormScreen() {
     });
   };
 
-  const pickImage = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Allow photo library access to add an image.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.8,
-      aspect: [4, 3],
-      allowsEditing: true,
-    });
-    if (!result.canceled) setImageUri(result.assets[0].uri);
-  };
-
   const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Missing title', 'Please give the recipe a title.');
@@ -234,10 +217,11 @@ export default function RecipeFormScreen() {
     }
     setSaving(true);
     try {
-      let heroImageUrl = imageUri ?? '';
-      // Only re-upload if it's a local file (not already a hosted URL)
-      if (imageUri && imageUri.startsWith('file')) {
-        heroImageUrl = await uploadRecipeImage(imageUri);
+      const heroImageUrl = (imageUri ?? '').trim();
+      if (heroImageUrl && !/^https?:\/\//i.test(heroImageUrl)) {
+        Alert.alert('Invalid image link', 'The photo link must start with http:// or https://');
+        setSaving(false);
+        return;
       }
 
       const keyIngredientNames = ingredients
@@ -316,13 +300,14 @@ export default function RecipeFormScreen() {
           </Text>
         </View>
 
-        <Pressable onPress={pickImage} className="bg-white dark:bg-[#2A211A] rounded-2xl h-44 items-center justify-center mb-4 overflow-hidden">
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        <View className="bg-white dark:bg-[#2A211A] rounded-2xl h-44 items-center justify-center mb-2 overflow-hidden">
+          {imageUri && /^https?:\/\//i.test(imageUri.trim()) ? (
+            <Image source={{ uri: imageUri.trim() }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
           ) : (
-            <Text className="text-[#8A6D4E] dark:text-[#B8A48C]">Tap to add photo</Text>
+            <Text className="text-[#8A6D4E] dark:text-[#B8A48C]">Photo preview</Text>
           )}
-        </Pressable>
+        </View>
+        <FormField label="Photo link (https://...)" value={imageUri ?? ''} onChangeText={setImageUri} />
 
         <FormField label="Title" value={title} onChangeText={setTitle} />
         <FormField label="Description" value={description} onChangeText={setDescription} multiline />

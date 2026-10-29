@@ -63,7 +63,7 @@ export interface Recipe {
   slug: string;
   description: string;
 
-  // string: remote URL (e.g. Cloudinary / Lorem Picsum) — render as { uri: heroImageUrl }
+  // string: remote URL (any https image link) — render as { uri: heroImageUrl }
   // number: local asset from require('../assets/...') — render as-is, no { uri } wrapper
   heroImageUrl: string | number;
   videoLoopUrl?: string;

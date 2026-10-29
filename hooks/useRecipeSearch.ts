@@ -3,7 +3,6 @@ import { useMemo, useState, useDeferredValue } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { toRecipe } from '../lib/recipeMapper';
-import { MOCK_RECIPES } from '../constants/mockRecipes';
 import type { Recipe, SearchFilters, Region, MealType, DietaryTag } from '../types';
 
 const EMPTY_FILTERS: SearchFilters = {
@@ -37,7 +36,7 @@ export function useRecipeSearch() {
         return (data ?? []).map(toRecipe) as Recipe[];
       } catch (err) {
         console.warn('[useRecipeSearch] Falling back to built-in recipe content:', err);
-        return MOCK_RECIPES;
+        return [] as Recipe[];
       }
     },
     staleTime: 5 * 60 * 1000, // 5 min — recipes don't change that often

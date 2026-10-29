@@ -6,7 +6,6 @@
 import { supabase } from '../lib/supabase';
 import { toRecipe } from '../lib/recipeMapper';
 import type { Recipe, Region, MealType } from '../types';
-import { MOCK_RECIPES, getMockRecipeById } from '../constants/mockRecipes';
 
 const PAGE_SIZE = 20;
 
@@ -14,18 +13,12 @@ const PAGE_SIZE = 20;
 // filtering here too keeps admins' home feed identical to what users see.
 const publishedRecipes = () => supabase.from('recipes').select('*').eq('status', 'published');
 
-/**
- * Runs a live database query. The bundled app content (constants/mockRecipes.ts)
- * is used ONLY when the database can't be reached (offline / error). An empty
- * result is a real answer: it means the admin has no published recipes (for
- * example after deleting them), so we must not bring the built-in samples back.
- */
-async function withMockFallback<T extends unknown[]>(fn: () => Promise<T>, fallback: () => T): Promise<T> {
+async function withMockFallback<T extends unknown[]>(fn: () => Promise<T>, _fallback?: () => T): Promise<T> {
   try {
     return await fn();
   } catch (err) {
-    console.warn('[recipeService] Falling back to built-in recipe content:', err);
-    return fallback();
+    console.warn('[recipeService] Could not load recipes:', err);
+    return [] as unknown as T;
   }
 }
 
@@ -39,7 +32,7 @@ export async function getFeaturedRecipes(): Promise<Recipe[]> {
       if (error) throw error;
       return (data ?? []).map(toRecipe);
     },
-    () => MOCK_RECIPES.filter((r) => r.isFeatured)
+    () => []
   );
 }
 
@@ -53,7 +46,7 @@ export async function getTrendingRecipes(): Promise<Recipe[]> {
       if (error) throw error;
       return (data ?? []).map(toRecipe);
     },
-    () => MOCK_RECIPES.filter((r) => r.isTrending)
+    () => []
   );
 }
 
@@ -67,7 +60,7 @@ export async function getRecipesByRegion(region: Region): Promise<Recipe[]> {
       if (error) throw error;
       return (data ?? []).map(toRecipe);
     },
-    () => MOCK_RECIPES.filter((r) => r.region === region)
+    () => []
   );
 }
 
@@ -80,7 +73,7 @@ export async function getRecipeById(id: string): Promise<Recipe | null> {
     return null;
   } catch (err) {
     console.warn('[recipeService] Falling back to built-in recipe content:', err);
-    return getMockRecipeById(id);
+    return null;
   }
 }
 
@@ -102,7 +95,7 @@ export async function getRecipeFeedPage(page = 0) {
     return { recipes, nextPage: hasMore ? page + 1 : undefined, hasMore };
   } catch (err) {
     console.warn('[recipeService] Falling back to built-in recipe content:', err);
-    return { recipes: MOCK_RECIPES, nextPage: undefined, hasMore: false };
+    return { recipes: [] as Recipe[], nextPage: undefined, hasMore: false };
   }
 }
 
@@ -116,6 +109,6 @@ export async function getRecipesByMealType(mealType: MealType): Promise<Recipe[]
       if (error) throw error;
       return (data ?? []).map(toRecipe);
     },
-    () => MOCK_RECIPES.filter((r) => r.mealTypes.includes(mealType))
+    () => []
   );
 }
