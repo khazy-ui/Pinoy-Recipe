@@ -18,6 +18,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-router',
     'expo-image',
     [
+      'expo-image-picker',
+      {
+        photosPermission: 'Allow Pinoy Recipes to access photos so you can upload recipe images.',
+      },
+    ],
+    [
       'expo-splash-screen',
       {
         image: './assets/images/splash.png',

@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import * as ImagePicker from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react-native';
 import {
   createRecipe,
   updateRecipe,
   getRecipeForAdmin,
+  uploadRecipeImage,
 } from '../../services/adminRecipeService';
 import { notifyAllUsersNewRecipe } from '../../services/recipeNotifications';
 import { useThemeStore } from '../../store/useThemeStore';
@@ -101,6 +103,7 @@ export default function RecipeFormScreen() {
   const [baseServings, setBaseServings] = useState('4');
   const [difficulty, setDifficulty] = useState<Difficulty>('Easy');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageMimeType, setImageMimeType] = useState<string | null>(null);
   const [isFeatured, setIsFeatured] = useState(false);
   const [isTrending, setIsTrending] = useState(false);
   const [published, setPublished] = useState(false);
@@ -186,6 +189,29 @@ export default function RecipeFormScreen() {
     });
   };
 
+  const pickImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Allow photo library access to upload a recipe photo.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        aspect: [4, 3],
+        allowsEditing: true,
+      });
+      if (!result.canceled) {
+        setImageUri(result.assets[0].uri);
+        setImageMimeType(result.assets[0].mimeType ?? 'image/jpeg');
+      }
+    } catch (err) {
+      Alert.alert('Photo selection failed', err instanceof Error ? err.message : 'Could not open the photo library.');
+    }
+  };
+
   const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Missing title', 'Please give the recipe a title.');
@@ -217,11 +243,13 @@ export default function RecipeFormScreen() {
     }
     setSaving(true);
     try {
-      const heroImageUrl = (imageUri ?? '').trim();
+      let heroImageUrl = (imageUri ?? '').trim();
       if (heroImageUrl && !/^https?:\/\//i.test(heroImageUrl)) {
-        Alert.alert('Invalid image link', 'The photo link must start with http:// or https://');
-        setSaving(false);
-        return;
+        if (!/^(file|content):\/\//i.test(heroImageUrl)) {
+          Alert.alert('Invalid photo', 'Choose a photo from your device before saving.');
+          return;
+        }
+        heroImageUrl = await uploadRecipeImage(heroImageUrl, imageMimeType ?? undefined);
       }
 
       const keyIngredientNames = ingredients
@@ -301,13 +329,19 @@ export default function RecipeFormScreen() {
         </View>
 
         <View className="bg-white dark:bg-[#2A211A] rounded-2xl h-44 items-center justify-center mb-2 overflow-hidden">
-          {imageUri && /^https?:\/\//i.test(imageUri.trim()) ? (
+          {imageUri ? (
             <Image source={{ uri: imageUri.trim() }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
           ) : (
             <Text className="text-[#8A6D4E] dark:text-[#B8A48C]">Photo preview</Text>
           )}
         </View>
-        <FormField label="Photo link (https://...)" value={imageUri ?? ''} onChangeText={setImageUri} />
+        <Pressable
+          onPress={pickImage}
+          accessibilityRole="button"
+          className="bg-white dark:bg-[#2A211A] rounded-xl py-3 items-center mb-3"
+        >
+          <Text className="text-sm font-semibold text-[#D97706]">Upload photo</Text>
+        </Pressable>
 
         <FormField label="Title" value={title} onChangeText={setTitle} />
         <FormField label="Description" value={description} onChangeText={setDescription} multiline />
