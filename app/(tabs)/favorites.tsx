@@ -1,19 +1,23 @@
 // app/(tabs)/favorites.tsx
-import { View, Pressable, FlatList } from 'react-native';
+import { View, Pressable, FlatList, ScrollView } from 'react-native';
+import { useState } from 'react';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { Heart, Clock, Star, ChevronLeft, ImageOff } from 'lucide-react-native';
+import { Heart, Clock, Star, ImageOff, Search } from 'lucide-react-native';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { getRecipeById } from '../../services/recipeService';
 import { resolveRecipeImageSource } from '../../lib/recipeImage';
 import { useThemeStore } from '../../store/useThemeStore';
 import ThemedBackground from '../../components/ThemedBackground';
-import type { Recipe } from '../../types';
+import type { Recipe, Region } from '../../types';
 import { ResponsiveText as Text } from '../../components/ResponsiveText';
+import { RECIPE_CATEGORIES, getRecipeCategory, type RecipeCategory } from '../../lib/recipeCategories';
 
 export default function FavoritesScreen() {
   const router = useRouter();
+  const [selectedRegion, setSelectedRegion] = useState<Region>();
+  const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>();
   const favoriteIds = useFavoritesStore((s) => s.favoriteIds);
   const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
   const isDark = useThemeStore((s) => s.isDark);
@@ -25,21 +29,55 @@ export default function FavoritesScreen() {
       return results.filter((r): r is Recipe => r !== null);
     },
   });
+  const filteredRecipes = recipes.filter(
+    (recipe) =>
+      (!selectedRegion || recipe.region === selectedRegion) &&
+      (!selectedCategory || getRecipeCategory(recipe) === selectedCategory)
+  );
 
   return (
     <ThemedBackground>
       <View className="flex-1 px-4 pt-4">
-        <Text className="text-xl font-bold text-[#3A2A1A] dark:text-[#F5EBDD]">My Favorites</Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="text-xl font-bold text-[#3A2A1A] dark:text-[#F5EBDD]">Favorites</Text>
+          <Pressable onPress={() => router.push('/(tabs)/search')} accessibilityLabel="Search recipes" className="p-2">
+            <Search size={20} color="#D97706" />
+          </Pressable>
+        </View>
         <Text className="text-sm text-[#8A6D4E] dark:text-[#B8A48C] mt-1 mb-4">
           {favoriteIds.length > 0
             ? `You have ${favoriteIds.length} recipe${favoriteIds.length === 1 ? '' : 's'} saved in your kitchen book`
             : 'Nothing saved yet — start building your kitchen book'}
         </Text>
 
+        <Text className="text-xs font-semibold text-[#8A6D4E] dark:text-[#B8A48C] mb-2">Location</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+          {(['Luzon', 'Visayas', 'Mindanao'] as Region[]).map((region) => (
+            <FilterChip
+              key={region}
+              label={region}
+              selected={selectedRegion === region}
+              onPress={() => setSelectedRegion((current) => current === region ? undefined : region)}
+            />
+          ))}
+        </ScrollView>
+
+        <Text className="text-xs font-semibold text-[#8A6D4E] dark:text-[#B8A48C] mb-2">Meal type</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+          {RECIPE_CATEGORIES.map((category) => (
+            <FilterChip
+              key={category}
+              label={category}
+              selected={selectedCategory === category}
+              onPress={() => setSelectedCategory((current) => current === category ? undefined : category)}
+            />
+          ))}
+        </ScrollView>
+
         {isLoading && <Text className="text-[#8A6D4E] dark:text-[#B8A48C]">Loading...</Text>}
 
         <FlatList
-          data={recipes}
+          data={filteredRecipes}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 16 }}
           renderItem={({ item }) => {
@@ -98,8 +136,30 @@ export default function FavoritesScreen() {
               <Text className="text-xs text-[#8A6D4E] dark:text-[#B8A48C]">Tap the heart on any recipe to save it here.</Text>
             </View>
           }
+          ListEmptyComponent={
+            !isLoading ? (
+              <Text className="py-8 text-center text-sm text-[#8A6D4E] dark:text-[#B8A48C]">
+                {recipes.length ? 'No favorites match these filters.' : 'No favorite recipes yet.'}
+              </Text>
+            ) : null
+          }
         />
       </View>
     </ThemedBackground>
+  );
+}
+
+function FilterChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className={`rounded-full border px-4 py-2 ${
+        selected
+          ? 'bg-[#D97706] border-[#D97706]'
+          : 'bg-white dark:bg-[#2A211A] border-[#F0E4D4] dark:border-[#3A2A1A]'
+      }`}
+    >
+      <Text className={`text-xs ${selected ? 'text-white' : 'text-[#3A2A1A] dark:text-[#F5EBDD]'}`}>{label}</Text>
+    </Pressable>
   );
 }

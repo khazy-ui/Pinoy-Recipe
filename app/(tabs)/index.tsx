@@ -1,5 +1,5 @@
 // app/(tabs)/index.tsx
-import { View, RefreshControl } from 'react-native';
+import { View, RefreshControl, Pressable, ScrollView } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -8,7 +8,6 @@ import {
   getRecipeFeedPage,
   getFeaturedRecipes,
   getTrendingRecipes,
-  getRecipesByRegion,
 } from '../../services/recipeService';
 import { RecipeCard } from '../../components/recipe/RecipeCard';
 import { RecipeCardSkeleton } from '../../components/recipe/RecipeCardSkeleton';
@@ -16,32 +15,31 @@ import { FeaturedCarousel } from '../../components/recipe/FeaturedCarousel';
 import { RegionChipRow } from '../../components/recipe/RegionChipRow';
 import ThemedBackground from '../../components/ThemedBackground';
 import NotificationBell from '../../components/NotificationBell';
-import type { Recipe, Region } from '../../types';
+import type { Recipe } from '../../types';
 import { ResponsiveText as Text } from '../../components/ResponsiveText';
+import { getRecipeCategory, RECIPE_CATEGORIES, type RecipeCategory } from '../../lib/recipeCategories';
 
 export default function HomeFeedScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedRegion, setSelectedRegion] = useState<Region>();
+  const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>();
 
-  const { data: featured, isLoading: loadingFeatured } = useQuery({
+  const { data: featured } = useQuery({
     queryKey: ['featured-recipes'],
     queryFn: getFeaturedRecipes,
     staleTime: 10 * 60 * 1000,
   });
 
-  const { data: trending, isLoading: loadingTrending } = useQuery({
+  const { data: trending } = useQuery({
     queryKey: ['trending-recipes'],
     queryFn: getTrendingRecipes,
     staleTime: 10 * 60 * 1000,
   });
 
   const { data: feedPage, isLoading: loadingFeed } = useQuery({
-    queryKey: ['recipe-feed', selectedRegion ?? 'all'],
-    queryFn: async () => ({
-      recipes: selectedRegion ? await getRecipesByRegion(selectedRegion) : (await getRecipeFeedPage()).recipes,
-    }),
+    queryKey: ['recipe-feed', 'all'],
+    queryFn: async () => ({ recipes: (await getRecipeFeedPage()).recipes }),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -54,6 +52,10 @@ export default function HomeFeedScreen() {
   }, [queryClient]);
 
   const openRecipe = (recipe: Recipe) => router.push(`/recipe/${recipe.id}`);
+  const visibleRecipes = (feedPage?.recipes ?? []).filter(
+    (recipe) => !selectedCategory || getRecipeCategory(recipe) === selectedCategory
+  );
+  const spotlightRecipes = (trending?.length ?? 0) > 0 ? trending ?? [] : featured ?? [];
 
   if (loadingFeed && !feedPage) {
     return (
@@ -70,7 +72,7 @@ export default function HomeFeedScreen() {
   return (
     <ThemedBackground>
       <FlashList
-        data={feedPage?.recipes ?? []}
+        data={visibleRecipes}
         keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D97706" />}
         ListHeaderComponent={
@@ -85,24 +87,53 @@ export default function HomeFeedScreen() {
               <NotificationBell />
             </View>
 
-            {!selectedRegion && !loadingFeatured && featured && featured.length > 0 && (
-              <FeaturedCarousel recipes={featured} onPressRecipe={openRecipe} />
+            <View className="px-4 mt-2 mb-2">
+              <Text className="text-lg font-semibold text-[#3A2A1A] dark:text-[#F5EBDD]">
+                {(trending?.length ?? 0) > 0 ? 'Now Trending' : 'Featured recipes'}
+              </Text>
+            </View>
+            {spotlightRecipes.length > 0 && (
+              <FeaturedCarousel recipes={spotlightRecipes} onPressRecipe={openRecipe} />
             )}
 
             <RegionChipRow
-              selectedRegion={selectedRegion}
-              onSelectRegion={(region) =>
-                setSelectedRegion((current) => (current === region ? undefined : region))
-              }
+              selectedRegion={undefined}
+              large
+              onSelectRegion={(region) => router.push(`/region/${region}`)}
             />
 
-            {(selectedRegion || (!loadingTrending && trending && trending.length > 0)) && (
-              <View className="px-4 mt-2 mb-1">
-                <Text className="text-lg font-semibold text-[#3A2A1A] dark:text-[#F5EBDD]">
-                  {selectedRegion ? `Recipes from ${selectedRegion}` : 'Now Trending'}
-                </Text>
-              </View>
-            )}
+            <Text className="px-4 mt-2 text-sm font-semibold text-[#8A6D4E] dark:text-[#B8A48C]">
+              Meal type categories
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingVertical: 8 }}
+            >
+              {RECIPE_CATEGORIES.map((category) => {
+                const active = selectedCategory === category;
+                return (
+                  <Pressable
+                    key={category}
+                    onPress={() => setSelectedCategory(active ? undefined : category)}
+                    className={`rounded-full border px-4 py-2 ${
+                      active
+                        ? 'bg-[#D97706] border-[#D97706]'
+                        : 'bg-white dark:bg-[#2A211A] border-[#F0E4D4] dark:border-[#3A2A1A]'
+                    }`}
+                  >
+                    <Text className={`text-xs ${active ? 'text-white' : 'text-[#3A2A1A] dark:text-[#F5EBDD]'}`}>
+                      {category}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <View className="px-4 mt-2 mb-1">
+              <Text className="text-lg font-semibold text-[#3A2A1A] dark:text-[#F5EBDD]">
+                {selectedCategory ? `${selectedCategory} recipes` : 'Recipes for you'}
+              </Text>
+            </View>
           </View>
         }
         renderItem={({ item }) => (
@@ -111,9 +142,9 @@ export default function HomeFeedScreen() {
           </View>
         )}
         ListEmptyComponent={
-          selectedRegion ? (
+          selectedCategory ? (
             <Text className="px-4 py-6 text-center text-sm text-[#8A6D4E] dark:text-[#B8A48C]">
-              No recipes found for {selectedRegion} yet.
+              No {selectedCategory.toLowerCase()} recipes found yet.
             </Text>
           ) : null
         }

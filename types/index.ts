@@ -115,6 +115,7 @@ export interface FavoritesState {
 export interface SearchFilters {
   query: string;
   region?: Region;
+  foodCategory?: 'Main Dish' | 'Side Dish' | 'Appetizer' | 'Sweet' | 'Dessert';
   mealTypes: MealType[];
   dietaryTags: DietaryTag[];
   keyIngredient?: string;

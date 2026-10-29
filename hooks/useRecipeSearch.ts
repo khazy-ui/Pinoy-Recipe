@@ -1,9 +1,11 @@
 // hooks/useRecipeSearch.ts
-import { useMemo, useState, useDeferredValue } from 'react';
+import { useMemo, useState, useDeferredValue, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { toRecipe } from '../lib/recipeMapper';
 import type { Recipe, SearchFilters, Region, MealType, DietaryTag } from '../types';
+import { getRecipeCategory, type RecipeCategory } from '../lib/recipeCategories';
+import type { RichRecipe } from '../lib/recipeMapper';
 
 const EMPTY_FILTERS: SearchFilters = {
   query: '',
@@ -24,6 +26,7 @@ const EMPTY_FILTERS: SearchFilters = {
 export function useRecipeSearch() {
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
   const deferredQuery = useDeferredValue(filters.query);
+  const setRegion = useCallback((region?: Region) => setFilters((f) => ({ ...f, region })), []);
 
   const { data: allRecipes = [], isLoading } = useQuery({
     queryKey: ['recipe-search-index'],
@@ -33,7 +36,7 @@ export function useRecipeSearch() {
         if (error) throw error;
         // Empty means the admin has no published recipes; only fall back to the
         // built-in samples if the database itself can't be reached (see catch below).
-        return (data ?? []).map(toRecipe) as Recipe[];
+        return (data ?? []).map(toRecipe) as RichRecipe[];
       } catch (err) {
         console.warn('[useRecipeSearch] Falling back to built-in recipe content:', err);
         return [] as Recipe[];
@@ -56,6 +59,8 @@ export function useRecipeSearch() {
       }
 
       if (filters.region && recipe.region !== filters.region) return false;
+
+      if (filters.foodCategory && getRecipeCategory(recipe) !== filters.foodCategory) return false;
 
       if (filters.keyIngredient) {
         const hasIngredient = (recipe.keyIngredientNames ?? [])
@@ -81,7 +86,9 @@ export function useRecipeSearch() {
   return {
     filters,
     setQuery: (query: string) => setFilters((f) => ({ ...f, query })),
-    setRegion: (region?: Region) => setFilters((f) => ({ ...f, region })),
+    setRegion,
+    setFoodCategory: (foodCategory?: RecipeCategory) =>
+      setFilters((f) => ({ ...f, foodCategory })),
     setKeyIngredient: (keyIngredient?: string) => setFilters((f) => ({ ...f, keyIngredient })),
     // One selection across the whole chip row (meal types AND dietary tags):
     // picking a chip moves the highlight to it; tapping the selected chip clears it.

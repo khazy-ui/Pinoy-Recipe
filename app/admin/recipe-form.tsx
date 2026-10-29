@@ -33,9 +33,9 @@ const DIFFICULTIES: Difficulty[] = ['Easy', 'Medium', 'Hard'];
 
 const FOOD_TYPES = [
   'Main Dish',
-  'Soup',
+  'Side Dish',
   'Appetizer',
-  'Breakfast',
+  'Sweet',
   'Dessert',
 ] as const;
 type FoodType = (typeof FOOD_TYPES)[number];
@@ -122,7 +122,12 @@ export default function RecipeFormScreen() {
       setTitle(recipe.title ?? '');
       setDescription(recipe.description ?? '');
       setRegion(recipe.region ?? '');
-      setFoodType(((recipe as Recipe & { foodType?: FoodType }).foodType) ?? '');
+      const savedFoodType = (recipe as Recipe & { foodType?: string }).foodType;
+      setFoodType(
+        savedFoodType === 'Soup' || savedFoodType === 'Breakfast'
+          ? 'Main Dish'
+          : FOOD_TYPES.find((type) => type === savedFoodType) ?? ''
+      );
       setPrepTimeMinutes(String(recipe.prepTimeMinutes ?? ''));
       setCookTimeMinutes(String(recipe.cookTimeMinutes ?? ''));
       setBaseServings(String(recipe.baseServings ?? ''));

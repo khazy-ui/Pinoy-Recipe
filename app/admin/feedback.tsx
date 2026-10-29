@@ -45,7 +45,7 @@ export default function AdminFeedbackScreen() {
 
   const [selected, setSelected] = useState<Feedback | null>(null);
   const [reply, setReply] = useState('');
-  const [status, setStatus] = useState<FeedbackStatus>('resolved');
+  const [status, setStatus] = useState<FeedbackStatus>('in_progress');
   const [busy, setBusy] = useState(false);
 
   useEffect(
@@ -65,7 +65,7 @@ export default function AdminFeedbackScreen() {
   const open = (f: Feedback) => {
     setSelected(f);
     setReply(f.adminReply ?? '');
-    setStatus(f.status === 'new' ? 'resolved' : f.status);
+    setStatus(f.status === 'new' ? 'in_progress' : f.status);
   };
 
   const close = () => {

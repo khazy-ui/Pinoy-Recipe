@@ -1,16 +1,18 @@
 // app/(tabs)/search.tsx
-import { View } from 'react-native';
+import { View, ScrollView, Pressable } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Search as SearchIcon } from 'lucide-react-native';
 import { useRecipeSearch } from '../../hooks/useRecipeSearch';
 import { RecipeCard } from '../../components/recipe/RecipeCard';
 import { FilterChipBar } from '../../components/search/FilterChipBar';
+import { RegionChipRow } from '../../components/recipe/RegionChipRow';
 import ThemedBackground from '../../components/ThemedBackground';
 import { useRouter } from 'expo-router';
 import type { Region } from '../../types';
 import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../../components/ResponsiveText';
+import { RECIPE_CATEGORIES, type RecipeCategory } from '../../lib/recipeCategories';
 
 export default function SearchScreen() {
   const router = useRouter();
@@ -19,16 +21,22 @@ export default function SearchScreen() {
     filters,
     setQuery,
     setRegion,
+    setFoodCategory,
     toggleMealType,
     toggleDietaryTag,
     results,
     isLoading,
     resultCount,
   } = useRecipeSearch();
+  const [selectedRegion, setSelectedRegion] = useState<Region>();
+  const selectedCategory = filters.foodCategory;
 
   useEffect(() => {
-    if (params.region) setRegion(params.region);
-  }, [params.region]);
+    if (params.region) {
+      setSelectedRegion(params.region);
+      setRegion(params.region);
+    }
+  }, [params.region, setRegion]);
 
   return (
     <ThemedBackground>
@@ -44,6 +52,33 @@ export default function SearchScreen() {
           />
         </View>
 
+        <Text className="text-xs font-semibold text-[#8A6D4E] dark:text-[#B8A48C] mt-3">Location</Text>
+        <RegionChipRow
+          selectedRegion={selectedRegion}
+          onSelectRegion={(region) => {
+            const nextRegion = selectedRegion === region ? undefined : region;
+            setSelectedRegion(nextRegion);
+            setRegion(nextRegion);
+          }}
+        />
+        <Text className="text-xs font-semibold text-[#8A6D4E] dark:text-[#B8A48C]">Meal type</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 8 }}>
+          {RECIPE_CATEGORIES.map((category: RecipeCategory) => (
+            <Pressable
+              key={category}
+              onPress={() => setFoodCategory(selectedCategory === category ? undefined : category)}
+              className={`rounded-full border px-3 py-2 ${
+                selectedCategory === category
+                  ? 'bg-[#D97706] border-[#D97706]'
+                  : 'bg-white dark:bg-[#2A211A] border-[#F0E4D4] dark:border-[#3A2A1A]'
+              }`}
+            >
+              <Text className={`text-xs ${selectedCategory === category ? 'text-white' : 'text-[#3A2A1A] dark:text-[#F5EBDD]'}`}>
+                {category}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
         <FilterChipBar
           selectedMealTypes={filters.mealTypes}
           selectedDietaryTags={filters.dietaryTags}
@@ -52,7 +87,7 @@ export default function SearchScreen() {
         />
 
         <Text className="text-xs text-[#8A6D4E] dark:text-[#B8A48C] my-2">
-          {isLoading ? 'Searching...' : `${resultCount} Result`}
+          {isLoading ? 'Searching...' : `${resultCount} ${resultCount === 1 ? 'Result' : 'Results'}`}
         </Text>
 
         <FlashList

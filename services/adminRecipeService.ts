@@ -9,7 +9,7 @@ import type { Recipe } from '../types';
 import * as Crypto from 'expo-crypto';
 
 // Admins need to see drafts too, so this does NOT filter by status.
-export async function getAllRecipesForAdmin(): Promise<Recipe[]> {
+export async function getAllRecipesForAdmin(): Promise<RichRecipe[]> {
   const { data, error } = await supabase
     .from('recipes')
     .select('*')
