@@ -1,0 +1,963 @@
+diff --git a/.env.example b/.env.example
+index 76d5f75..79919d0 100644
+--- a/.env.example
++++ b/.env.example
+@@ -6,7 +6,3 @@
+ # so this key is safe in the app bundle. NEVER put the secret / service_role key here.
+ EXPO_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT-ID.supabase.co
+ EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxxxxxxxxxxxxxx
+-
+-# Cloudinary (recipe image uploads, unchanged)
+-EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME=
+-EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET=
+diff --git a/app/admin/index.tsx b/app/admin/index.tsx
+index 8894264..a9d2b8e 100644
+--- a/app/admin/index.tsx
++++ b/app/admin/index.tsx
+@@ -8,8 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
+ import { useTopInset } from '../../hooks/useTopInset';
+ import { useRouter } from 'expo-router';
+ import { useQuery, useQueryClient } from '@tanstack/react-query';
+-import { Plus, Trash2, Download, Search as SearchIcon, X } from 'lucide-react-native';
+-import { getAllRecipesForAdmin, deleteRecipe, seedMockRecipes } from '../../services/adminRecipeService';
++import { Plus, Trash2, Search as SearchIcon, X } from 'lucide-react-native';
++import { getAllRecipesForAdmin, deleteRecipe } from '../../services/adminRecipeService';
+ import ThemedBackground from '../../components/ThemedBackground';
+ import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../../components/ResponsiveText';
+ 
+@@ -18,7 +18,6 @@ export default function AdminRecipeListScreen() {
+   const insets = useSafeAreaInsets();
+   const topInset = useTopInset();
+   const queryClient = useQueryClient();
+-  const [seeding, setSeeding] = useState(false);
+   const [search, setSearch] = useState('');
+ 
+   const { data: recipes, isLoading } = useQuery({
+@@ -55,38 +54,6 @@ export default function AdminRecipeListScreen() {
+     ]);
+   };
+ 
+-  const handleSeed = () => {
+-    Alert.alert(
+-      'Import Built-in Recipes',
+-      'This copies the 8 built-in sample recipes into your database so you can manage them here. Continue?',
+-      [
+-        { text: 'Cancel', style: 'cancel' },
+-        {
+-          text: 'Import',
+-          onPress: async () => {
+-            setSeeding(true);
+-            try {
+-              const { created, skippedImages, alreadyExisted } = await seedMockRecipes();
+-              queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+-              Alert.alert(
+-                'Done',
+-                `Imported ${created} recipe${created === 1 ? '' : 's'}.` +
+-                  (alreadyExisted > 0 ? ` ${alreadyExisted} were already imported and left as-is.` : '') +
+-                  (skippedImages > 0
+-                    ? ` ${skippedImages} of them need a photo re-added via Edit Recipe (they used a bundled image that can't transfer automatically).`
+-                    : '')
+-              );
+-            } catch (err: any) {
+-              Alert.alert('Import failed', err.message);
+-            } finally {
+-              setSeeding(false);
+-            }
+-          },
+-        },
+-      ]
+-    );
+-  };
+-
+   return (
+     <ThemedBackground>
+       <View className="flex-1 px-4" style={{ paddingTop: topInset + 16 }}>
+@@ -121,23 +88,6 @@ export default function AdminRecipeListScreen() {
+ 
+         {isLoading && <Text className="text-[#8A6D4E] dark:text-[#B8A48C]">Loading...</Text>}
+ 
+-        {!isLoading && (recipes ?? []).length === 0 && (
+-          <Pressable
+-            onPress={handleSeed}
+-            disabled={seeding}
+-            className="bg-white dark:bg-[#2A211A] border border-dashed border-[#D97706] rounded-2xl p-4 mb-3 flex-row items-center justify-center gap-2"
+-          >
+-            {seeding ? (
+-              <ActivityIndicator color="#D97706" />
+-            ) : (
+-              <>
+-                <Download size={16} color="#D97706" />
+-                <Text className="text-[#D97706] font-semibold text-sm">Import the 8 built-in recipes</Text>
+-              </>
+-            )}
+-          </Pressable>
+-        )}
+-
+         <FlatList
+           data={filtered}
+           keyExtractor={(item) => item.id}
+diff --git a/app/admin/recipe-form.tsx b/app/admin/recipe-form.tsx
+index 41e01ce..b5b6f05 100644
+--- a/app/admin/recipe-form.tsx
++++ b/app/admin/recipe-form.tsx
+@@ -3,14 +3,12 @@ import { useEffect, useState } from 'react';
+ import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, Switch } from 'react-native';
+ import { useLocalSearchParams, useRouter } from 'expo-router';
+ import { useQueryClient } from '@tanstack/react-query';
+-import * as ImagePicker from 'expo-image-picker';
+ import * as Crypto from 'expo-crypto';
+ import { ArrowLeft, Plus, Trash2 } from 'lucide-react-native';
+ import {
+   createRecipe,
+   updateRecipe,
+   getRecipeForAdmin,
+-  uploadRecipeImage,
+ } from '../../services/adminRecipeService';
+ import { notifyAllUsersNewRecipe } from '../../services/recipeNotifications';
+ import { useThemeStore } from '../../store/useThemeStore';
+@@ -188,21 +186,6 @@ export default function RecipeFormScreen() {
+     });
+   };
+ 
+-  const pickImage = async () => {
+-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+-    if (!permission.granted) {
+-      Alert.alert('Permission needed', 'Allow photo library access to add an image.');
+-      return;
+-    }
+-    const result = await ImagePicker.launchImageLibraryAsync({
+-      mediaTypes: ['images'],
+-      quality: 0.8,
+-      aspect: [4, 3],
+-      allowsEditing: true,
+-    });
+-    if (!result.canceled) setImageUri(result.assets[0].uri);
+-  };
+-
+   const handleSave = async () => {
+     if (!title.trim()) {
+       Alert.alert('Missing title', 'Please give the recipe a title.');
+@@ -234,10 +217,11 @@ export default function RecipeFormScreen() {
+     }
+     setSaving(true);
+     try {
+-      let heroImageUrl = imageUri ?? '';
+-      // Only re-upload if it's a local file (not already a hosted URL)
+-      if (imageUri && imageUri.startsWith('file')) {
+-        heroImageUrl = await uploadRecipeImage(imageUri);
++      const heroImageUrl = (imageUri ?? '').trim();
++      if (heroImageUrl && !/^https?:\/\//i.test(heroImageUrl)) {
++        Alert.alert('Invalid image link', 'The photo link must start with http:// or https://');
++        setSaving(false);
++        return;
+       }
+ 
+       const keyIngredientNames = ingredients
+@@ -316,13 +300,14 @@ export default function RecipeFormScreen() {
+           </Text>
+         </View>
+ 
+-        <Pressable onPress={pickImage} className="bg-white dark:bg-[#2A211A] rounded-2xl h-44 items-center justify-center mb-4 overflow-hidden">
+-          {imageUri ? (
+-            <Image source={{ uri: imageUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
++        <View className="bg-white dark:bg-[#2A211A] rounded-2xl h-44 items-center justify-center mb-2 overflow-hidden">
++          {imageUri && /^https?:\/\//i.test(imageUri.trim()) ? (
++            <Image source={{ uri: imageUri.trim() }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+           ) : (
+-            <Text className="text-[#8A6D4E] dark:text-[#B8A48C]">Tap to add photo</Text>
++            <Text className="text-[#8A6D4E] dark:text-[#B8A48C]">Photo preview</Text>
+           )}
+-        </Pressable>
++        </View>
++        <FormField label="Photo link (https://...)" value={imageUri ?? ''} onChangeText={setImageUri} />
+ 
+         <FormField label="Title" value={title} onChangeText={setTitle} />
+         <FormField label="Description" value={description} onChangeText={setDescription} multiline />
+diff --git a/constants/mockRecipes.ts b/constants/mockRecipes.ts
+deleted file mode 100644
+index 6da20e1..0000000
+--- a/constants/mockRecipes.ts
++++ /dev/null
+@@ -1,458 +0,0 @@
+-// constants/mockRecipes.ts
+-//
+-// Built-in Pinoy Recipes content.
+-//
+-// The app is designed to read live data from Firestore (see services/recipeService.ts),
+-// but a brand-new Firebase project starts with an empty `recipes` collection, which
+-// means the app would otherwise show nothing at all. This file supplies real,
+-// ready-to-use recipe content so the app is fully populated out of the box.
+-//
+-// recipeService.ts automatically falls back to this content whenever Firestore
+-// is empty, unreachable, or not yet configured. Once real recipes are added via
+-// the Admin > Manage Recipes screen, that live content is used instead.
+-//
+-// Placeholder images use Lorem Picsum (stable, license-free placeholder photos).
+-// Replace heroImageUrl with real food photography via the admin image uploader
+-// whenever you're ready.
+-import type { Recipe } from '../types';
+-
+-const now = new Date().toISOString();
+-
+-function img(seed: string) {
+-  return `https://picsum.photos/seed/${seed}/800/600`;
+-}
+-
+-export const MOCK_RECIPES: Recipe[] = [
+-  {
+-    id: 'adobo-heirloom',
+-    title: "Lola's Heirloom Chicken Adobo",
+-    slug: 'lolas-heirloom-chicken-adobo',
+-    description:
+-      'The classic Filipino braise: chicken simmered low and slow in soy sauce, cane vinegar, garlic, and bay leaves until deeply savory and fall-apart tender.',
+-    heroImageUrl: require('../assets/images/recipes/adobo.jpeg'),
+-    region: 'Luzon',
+-    mealTypes: ['Ulam'],
+-    dietaryTags: ['Dairy-Free', 'Pork-Free'],
+-    sourceTags: ['Heirloom', "Editor's Pick"],
+-    prepTimeMinutes: 15,
+-    cookTimeMinutes: 35,
+-    baseServings: 4,
+-    difficulty: 'Easy',
+-    ingredients: [
+-      { id: 'i1', name: 'Chicken cuts (thighs & drumsticks)', quantity: 1, unit: 'kg' },
+-      { id: 'i2', name: 'Soy sauce (preferably Silver Swan)', quantity: 0.5, unit: 'cup' },
+-      { id: 'i3', name: 'Cane vinegar (Datu Puti)', quantity: 0.33, unit: 'cup' },
+-      { id: 'i4', name: 'Garlic cloves, smashed & peeled', quantity: 8, unit: 'pcs', notes: '1 head' },
+-      { id: 'i5', name: 'Dried bay leaves', quantity: 3, unit: 'pcs' },
+-      { id: 'i6', name: 'Whole black peppercorns', quantity: 1, unit: 'tbsp' },
+-    ],
+-    steps: [
+-      {
+-        id: 's1',
+-        order: 1,
+-        title: 'Marinate the chicken',
+-        instruction:
+-          'In a bowl, marinate chicken in soy sauce, vinegar, crushed garlic, and peppercorns for at least 30 minutes.',
+-        timerSeconds: 1800,
+-      },
+-      {
+-        id: 's2',
+-        order: 2,
+-        title: 'Sear the chicken',
+-        instruction:
+-          'Pan-fry the marinated chicken pieces in a hot skillet for 2 minutes on each side until slightly golden.',
+-      },
+-      {
+-        id: 's3',
+-        order: 3,
+-        title: 'Simmer until tender',
+-        instruction:
+-          'Pour the remaining marinade and bay leaves into the pan, simmer for 25 minutes until chicken is tender.',
+-        timerSeconds: 1500,
+-      },
+-    ],
+-    keyIngredientNames: ['chicken', 'soy sauce', 'vinegar', 'garlic', 'bay leaves'],
+-    isFeatured: true,
+-    isTrending: true,
+-    createdByAdminId: 'seed-content',
+-    createdAt: now,
+-    updatedAt: now,
+-    publishedAt: now,
+-    status: 'published',
+-  },
+-  {
+-    id: 'sisig-sizzling',
+-    title: 'Sizzling Sisig',
+-    slug: 'sizzling-sisig',
+-    description:
+-      'Chopped, seasoned pork sizzled on a hot plate with onions, chili, and calamansi — a Pampanga classic best eaten straight off the pan.',
+-    heroImageUrl: require('../assets/images/recipes/sisig.jpg'),
+-    region: 'Pampanga',
+-    mealTypes: ['Ulam'],
+-    dietaryTags: [],
+-    sourceTags: ['Panlasang Pinoy', 'Community Submitted'],
+-    prepTimeMinutes: 20,
+-    cookTimeMinutes: 20,
+-    baseServings: 4,
+-    difficulty: 'Medium',
+-    ingredients: [
+-      { id: 'i1', name: 'Pork belly and pig ears, boiled', quantity: 1, unit: 'kg' },
+-      { id: 'i2', name: 'White onion, finely chopped', quantity: 1, unit: 'pcs' },
+-      { id: 'i3', name: 'Green and red chili peppers, chopped', quantity: 4, unit: 'pcs' },
+-      { id: 'i4', name: 'Calamansi', quantity: 6, unit: 'pcs' },
+-      { id: 'i5', name: 'Mayonnaise', quantity: 2, unit: 'tbsp' },
+-      { id: 'i6', name: 'Egg', quantity: 1, unit: 'pcs', notes: 'optional topping' },
+-    ],
+-    steps: [
+-      {
+-        id: 's1',
+-        order: 1,
+-        title: 'Boil and grill',
+-        instruction:
+-          'Boil pork belly and pig ears until tender, then grill both until the skin is crisp and lightly charred.',
+-      },
+-      {
+-        id: 's2',
+-        order: 2,
+-        title: 'Chop finely',
+-        instruction: 'Chop the grilled pork and pig ears into small, even pieces.',
+-      },
+-      {
+-        id: 's3',
+-        order: 3,
+-        title: 'Sizzle and serve',
+-        instruction:
+-          'Toss the chopped pork on a hot sizzling plate with onions, chili, mayonnaise, and calamansi. Top with a raw egg and serve immediately.',
+-      },
+-    ],
+-    keyIngredientNames: ['pork', 'sisig', 'chili', 'calamansi'],
+-    isFeatured: true,
+-    isTrending: false,
+-    createdByAdminId: 'seed-content',
+-    createdAt: now,
+-    updatedAt: now,
+-    publishedAt: now,
+-    status: 'published',
+-  },
+-  {
+-    id: 'sinigang-baboy',
+-    title: 'Sinigang na Baboy sa Sampalok',
+-    slug: 'sinigang-na-baboy-sa-sampalok',
+-    description:
+-      'A comforting sour tamarind soup with tender pork belly, kangkong, radish, and okra — the ultimate Filipino comfort food.',
+-    heroImageUrl: require('../assets/images/recipes/sinigang.jpg'),
+-    region: 'Luzon',
+-    mealTypes: ['Soup', 'Ulam'],
+-    dietaryTags: ['Dairy-Free'],
+-    sourceTags: ['Panlasang Pinoy'],
+-    prepTimeMinutes: 15,
+-    cookTimeMinutes: 30,
+-    baseServings: 4,
+-    difficulty: 'Easy',
+-    ingredients: [
+-      { id: 'i1', name: 'Pork belly, cubed', quantity: 1, unit: 'kg' },
+-      { id: 'i2', name: 'Tamarind soup base (sinigang mix)', quantity: 1, unit: 'pcs', notes: '1 pack' },
+-      { id: 'i3', name: 'Kangkong (water spinach)', quantity: 1, unit: 'pcs', notes: '1 bunch' },
+-      { id: 'i4', name: 'Radish, sliced', quantity: 1, unit: 'pcs' },
+-      { id: 'i5', name: 'Okra', quantity: 6, unit: 'pcs' },
+-      { id: 'i6', name: 'Tomatoes and onion', quantity: 2, unit: 'pcs' },
+-    ],
+-    steps: [
+-      {
+-        id: 's1',
+-        order: 1,
+-        title: 'Boil the pork',
+-        instruction: 'Boil pork belly with tomatoes and onion until tender, skimming off any scum.',
+-        timerSeconds: 1200,
+-      },
+-      {
+-        id: 's2',
+-        order: 2,
+-        title: 'Add the sour base',
+-        instruction: 'Stir in the tamarind soup base and let the broth come back to a simmer.',
+-      },
+-      {
+-        id: 's3',
+-        order: 3,
+-        title: 'Add vegetables',
+-        instruction: 'Add radish and okra, simmer until just tender, then finish with kangkong. Season with fish sauce to taste.',
+-      },
+-    ],
+-    keyIngredientNames: ['pork', 'sampalok', 'tamarind', 'kangkong', 'sinigang'],
+-    isFeatured: false,
+-    isTrending: true,
+-    createdByAdminId: 'seed-content',
+-    createdAt: now,
+-    updatedAt: now,
+-    publishedAt: now,
+-    status: 'published',
+-  },
+-  {
+-    id: 'lechon-kawali-classic',
+-    title: 'Classic Pork Lechon Kawali',
+-    slug: 'classic-pork-lechon-kawali',
+-    description:
+-      'Deep-fried pork belly with a shatteringly crisp skin and juicy interior, served with a tangy vinegar-soy dipping sauce.',
+-    heroImageUrl: require('../assets/images/recipes/lechon-kawali.jpg'),
+-    region: 'Visayas',
+-    mealTypes: ['Ulam', 'Fiesta Specials'],
+-    dietaryTags: ['Dairy-Free'],
+-    sourceTags: ['Panlasang Pinoy'],
+-    prepTimeMinutes: 15,
+-    cookTimeMinutes: 45,
+-    baseServings: 4,
+-    difficulty: 'Medium',
+-    ingredients: [
+-      { id: 'i1', name: 'Pork belly, whole slab', quantity: 1, unit: 'kg' },
+-      { id: 'i2', name: 'Garlic cloves', quantity: 5, unit: 'pcs' },
+-      { id: 'i3', name: 'Bay leaves', quantity: 3, unit: 'pcs' },
+-      { id: 'i4', name: 'Whole peppercorns', quantity: 1, unit: 'tbsp' },
+-      { id: 'i5', name: 'Salt', quantity: 2, unit: 'tsp' },
+-      { id: 'i6', name: 'Cooking oil for deep-frying', quantity: 4, unit: 'cup' },
+-    ],
+-    steps: [
+-      {
+-        id: 's1',
+-        order: 1,
+-        title: 'Boil until tender',
+-        instruction: 'Boil pork belly with garlic, bay leaves, peppercorns, and salt until fork-tender.',
+-        timerSeconds: 2400,
+-      },
+-      {
+-        id: 's2',
+-        order: 2,
+-        title: 'Air-dry',
+-        instruction: 'Drain and let the pork air-dry, uncovered, for at least 20 minutes so the skin crisps well when fried.',
+-      },
+-      {
+-        id: 's3',
+-        order: 3,
+-        title: 'Deep-fry',
+-        instruction: 'Deep-fry in hot oil until the skin is golden, blistered, and crackling. Rest briefly, then chop and serve.',
+-      },
+-    ],
+-    keyIngredientNames: ['pork', 'lechon kawali', 'crispy pork'],
+-    isFeatured: false,
+-    isTrending: false,
+-    createdByAdminId: 'seed-content',
+-    createdAt: now,
+-    updatedAt: now,
+-    publishedAt: now,
+-    status: 'published',
+-  },
+-  {
+-    id: 'kare-kare-oxtail',
+-    title: 'Oxtail Kare-Kare in Claypot',
+-    slug: 'oxtail-kare-kare-in-claypot',
+-    description:
+-      'Oxtail and vegetables braised in a rich, nutty peanut sauce — a festive Filipino stew traditionally served with bagoong on the side.',
+-    heroImageUrl: img('kare-kare-oxtail'),
+-    region: 'Luzon',
+-    mealTypes: ['Ulam', 'Fiesta Specials'],
+-    dietaryTags: [],
+-    sourceTags: ['Heirloom'],
+-    prepTimeMinutes: 20,
+-    cookTimeMinutes: 70,
+-    baseServings: 4,
+-    difficulty: 'Hard',
+-    ingredients: [
+-      { id: 'i1', name: 'Oxtail, cut into segments', quantity: 1.2, unit: 'kg' },
+-      { id: 'i2', name: 'Peanut butter', quantity: 1, unit: 'cup' },
+-      { id: 'i3', name: 'Ground toasted rice', quantity: 3, unit: 'tbsp' },
+-      { id: 'i4', name: 'Eggplant, sliced', quantity: 2, unit: 'pcs' },
+-      { id: 'i5', name: 'String beans', quantity: 1, unit: 'pcs', notes: '1 bunch' },
+-      { id: 'i6', name: 'Bok choy', quantity: 1, unit: 'pcs', notes: '1 bunch' },
+-      { id: 'i7', name: 'Bagoong (shrimp paste)', quantity: 4, unit: 'tbsp', notes: 'served on the side' },
+-    ],
+-    steps: [
+-      {
+-        id: 's1',
+-        order: 1,
+-        title: 'Braise the oxtail',
+-        instruction: 'Simmer oxtail in water until very tender, about 1 hour, reserving the broth.',
+-        timerSeconds: 3600,
+-      },
+-      {
+-        id: 's2',
+-        order: 2,
+-        title: 'Build the peanut sauce',
+-        instruction: 'Whisk peanut butter and ground toasted rice into the reserved broth until thickened.',
+-      },
+-      {
+-        id: 's3',
+-        order: 3,
+-        title: 'Finish with vegetables',
+-        instruction: 'Add eggplant, string beans, and bok choy, simmer until just tender. Serve hot with bagoong on the side.',
+-      },
+-    ],
+-    keyIngredientNames: ['oxtail', 'kare-kare', 'peanut sauce'],
+-    isFeatured: false,
+-    isTrending: false,
+-    createdByAdminId: 'seed-content',
+-    createdAt: now,
+-    updatedAt: now,
+-    publishedAt: now,
+-    status: 'published',
+-  },
+-  {
+-    id: 'kare-kare-seafood',
+-    title: 'Seafood Kare-Kare Delight',
+-    slug: 'seafood-kare-kare-delight',
+-    description:
+-      'A lighter, coastal take on kare-kare, with shrimp and squid simmered in the same rich peanut sauce.',
+-    heroImageUrl: require('../assets/images/recipes/kare-kare-seafood.jpg'),
+-    region: 'Mindanao',
+-    mealTypes: ['Ulam'],
+-    dietaryTags: ['Seafood'],
+-    sourceTags: ['Community Submitted'],
+-    prepTimeMinutes: 15,
+-    cookTimeMinutes: 25,
+-    baseServings: 4,
+-    difficulty: 'Medium',
+-    ingredients: [
+-      { id: 'i1', name: 'Shrimp, peeled and deveined', quantity: 0.5, unit: 'kg' },
+-      { id: 'i2', name: 'Squid, cleaned and sliced into rings', quantity: 0.5, unit: 'kg' },
+-      { id: 'i3', name: 'Peanut butter', quantity: 0.75, unit: 'cup' },
+-      { id: 'i4', name: 'Ground toasted rice', quantity: 2, unit: 'tbsp' },
+-      { id: 'i5', name: 'Eggplant, sliced', quantity: 2, unit: 'pcs' },
+-      { id: 'i6', name: 'String beans', quantity: 1, unit: 'pcs', notes: '1 bunch' },
+-    ],
+-    steps: [
+-      {
+-        id: 's1',
+-        order: 1,
+-        title: 'Make the peanut sauce',
+-        instruction: 'Simmer peanut butter, ground toasted rice, and stock together until thickened.',
+-      },
+-      {
+-        id: 's2',
+-        order: 2,
+-        title: 'Cook the seafood',
+-        instruction: 'Add shrimp and squid to the sauce, simmer briefly until just cooked through — do not overcook.',
+-      },
+-      {
+-        id: 's3',
+-        order: 3,
+-        title: 'Add vegetables and serve',
+-        instruction: 'Add eggplant and string beans, simmer until tender, then serve hot with bagoong on the side.',
+-      },
+-    ],
+-    keyIngredientNames: ['shrimp', 'squid', 'kare-kare', 'seafood'],
+-    isFeatured: false,
+-    isTrending: false,
+-    createdByAdminId: 'seed-content',
+-    createdAt: now,
+-    updatedAt: now,
+-    publishedAt: now,
+-    status: 'published',
+-  },
+-  {
+-    id: 'pork-adobo-classic',
+-    title: 'Pork Adobo Classic',
+-    slug: 'pork-adobo-classic',
+-    description:
+-      'Pork belly braised in soy sauce, vinegar, garlic, and peppercorns until richly flavored and tender — a Filipino household staple.',
+-    heroImageUrl: require('../assets/images/recipes/pork-adobo.jpg'),
+-    region: 'Luzon',
+-    mealTypes: ['Ulam'],
+-    dietaryTags: ['Dairy-Free'],
+-    sourceTags: ['Panlasang Pinoy'],
+-    prepTimeMinutes: 10,
+-    cookTimeMinutes: 40,
+-    baseServings: 4,
+-    difficulty: 'Easy',
+-    ingredients: [
+-      { id: 'i1', name: 'Pork belly, cubed', quantity: 1, unit: 'kg' },
+-      { id: 'i2', name: 'Soy sauce', quantity: 0.5, unit: 'cup' },
+-      { id: 'i3', name: 'Cane vinegar', quantity: 0.33, unit: 'cup' },
+-      { id: 'i4', name: 'Garlic cloves, crushed', quantity: 6, unit: 'pcs' },
+-      { id: 'i5', name: 'Bay leaves', quantity: 3, unit: 'pcs' },
+-      { id: 'i6', name: 'Whole peppercorns', quantity: 1, unit: 'tbsp' },
+-    ],
+-    steps: [
+-      {
+-        id: 's1',
+-        order: 1,
+-        title: 'Marinate',
+-        instruction: 'Marinate pork in soy sauce, vinegar, garlic, bay leaves, and peppercorns for 20 minutes.',
+-        timerSeconds: 1200,
+-      },
+-      {
+-        id: 's2',
+-        order: 2,
+-        title: 'Sear',
+-        instruction: 'Sear the marinated pork in a hot pot until lightly browned on all sides.',
+-      },
+-      {
+-        id: 's3',
+-        order: 3,
+-        title: 'Braise',
+-        instruction: 'Add the remaining marinade plus a splash of water, cover, and simmer for 30 minutes until tender.',
+-        timerSeconds: 1800,
+-      },
+-    ],
+-    keyIngredientNames: ['pork', 'adobo', 'soy sauce', 'vinegar'],
+-    isFeatured: false,
+-    isTrending: true,
+-    createdByAdminId: 'seed-content',
+-    createdAt: now,
+-    updatedAt: now,
+-    publishedAt: now,
+-    status: 'published',
+-  },
+-  {
+-    id: 'sisig-crispy',
+-    title: 'Crispy Pork Sisig',
+-    slug: 'crispy-pork-sisig',
+-    description:
+-      'An extra-crispy spin on sisig, twice-cooked for maximum crunch and finished sizzling hot with a fried egg on top.',
+-    heroImageUrl: img('crispy-sisig'),
+-    region: 'Luzon',
+-    mealTypes: ['Ulam'],
+-    dietaryTags: [],
+-    sourceTags: ["Editor's Pick"],
+-    prepTimeMinutes: 15,
+-    cookTimeMinutes: 20,
+-    baseServings: 4,
+-    difficulty: 'Medium',
+-    ingredients: [
+-      { id: 'i1', name: 'Pork belly, boiled and diced', quantity: 1, unit: 'kg' },
+-      { id: 'i2', name: 'Onion, chopped', quantity: 1, unit: 'pcs' },
+-      { id: 'i3', name: 'Chili peppers, chopped', quantity: 3, unit: 'pcs' },
+-      { id: 'i4', name: 'Calamansi', quantity: 6, unit: 'pcs' },
+-      { id: 'i5', name: 'Egg', quantity: 1, unit: 'pcs', notes: 'for topping' },
+-    ],
+-    steps: [
+-      {
+-        id: 's1',
+-        order: 1,
+-        title: 'Double-fry the pork',
+-        instruction: 'Deep-fry the boiled pork twice until deeply golden and extra crispy throughout.',
+-      },
+-      {
+-        id: 's2',
+-        order: 2,
+-        title: 'Chop and toss',
+-        instruction: 'Chop the crispy pork finely and toss with onions, chili, and calamansi.',
+-      },
+-      {
+-        id: 's3',
+-        order: 3,
+-        title: 'Sizzle and top',
+-        instruction: 'Serve on a hot sizzling plate topped with a freshly fried egg.',
+-      },
+-    ],
+-    keyIngredientNames: ['pork', 'sisig', 'crispy'],
+-    isFeatured: false,
+-    isTrending: false,
+-    createdByAdminId: 'seed-content',
+-    createdAt: now,
+-    updatedAt: now,
+-    publishedAt: now,
+-    status: 'published',
+-  },
+-];
+-
+-export function getMockRecipeById(id: string): Recipe | null {
+-  return MOCK_RECIPES.find((r) => r.id === id) ?? null;
+-}
+diff --git a/hooks/useRecipeSearch.ts b/hooks/useRecipeSearch.ts
+index 9572c07..6d0f708 100644
+--- a/hooks/useRecipeSearch.ts
++++ b/hooks/useRecipeSearch.ts
+@@ -3,7 +3,6 @@ import { useMemo, useState, useDeferredValue } from 'react';
+ import { useQuery } from '@tanstack/react-query';
+ import { supabase } from '../lib/supabase';
+ import { toRecipe } from '../lib/recipeMapper';
+-import { MOCK_RECIPES } from '../constants/mockRecipes';
+ import type { Recipe, SearchFilters, Region, MealType, DietaryTag } from '../types';
+ 
+ const EMPTY_FILTERS: SearchFilters = {
+@@ -37,7 +36,7 @@ export function useRecipeSearch() {
+         return (data ?? []).map(toRecipe) as Recipe[];
+       } catch (err) {
+         console.warn('[useRecipeSearch] Falling back to built-in recipe content:', err);
+-        return MOCK_RECIPES;
++        return [] as Recipe[];
+       }
+     },
+     staleTime: 5 * 60 * 1000, // 5 min — recipes don't change that often
+diff --git a/lib/recipeImage.ts b/lib/recipeImage.ts
+index 60c1938..d58c8cb 100644
+--- a/lib/recipeImage.ts
++++ b/lib/recipeImage.ts
+@@ -5,7 +5,7 @@
+ // whose photo hasn't been re-added via Edit Recipe).
+ //
+ // heroImageUrl can be:
+-//   - a real hosted URL string (Cloudinary) -> wrap as { uri }
++//   - a real hosted URL string (any https image link) -> wrap as { uri }
+ //   - a local require()'d asset number      -> pass through as-is
+ //   - an empty string ''                    -> treat as "no image"
+ //   - undefined/null                        -> treat as "no image"
+diff --git a/package-lock.json b/package-lock.json
+index 1958af9..1d6cd92 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -16,7 +16,6 @@
+         "expo-constants": "~57.0.17",
+         "expo-crypto": "~57.0.4",
+         "expo-image": "~57.0.5",
+-        "expo-image-picker": "~57.0.20",
+         "expo-keep-awake": "~57.0.1",
+         "expo-linking": "~57.0.13",
+         "expo-router": "~57.0.28",
+@@ -4299,27 +4298,6 @@
+         }
+       }
+     },
+-    "node_modules/expo-image-loader": {
+-      "version": "57.0.1",
+-      "resolved": "https://registry.npmjs.org/expo-image-loader/-/expo-image-loader-57.0.1.tgz",
+-      "integrity": "sha512-uhrZKLT/cTl2mXyR28kPpVkS5O+PK9N1QA/07IFM4f5T4g0lTW1JHT3NEWwEEsGFldPmVX4j7LwUVVZxE+woug==",
+-      "license": "MIT",
+-      "peerDependencies": {
+-        "expo": "*"
+-      }
+-    },
+-    "node_modules/expo-image-picker": {
+-      "version": "57.0.20",
+-      "resolved": "https://registry.npmjs.org/expo-image-picker/-/expo-image-picker-57.0.20.tgz",
+-      "integrity": "sha512-plgcGuMZMWqDchjXQW6S/WepYLB5KqfbZOzwC6xe0+j5IhY4ipvVuRZcXeP/0NgKgU0Jiu/XoTK4Bi8crtZ+sQ==",
+-      "license": "MIT",
+-      "dependencies": {
+-        "expo-image-loader": "~57.0.1"
+-      },
+-      "peerDependencies": {
+-        "expo": "*"
+-      }
+-    },
+     "node_modules/expo-keep-awake": {
+       "version": "57.0.2",
+       "resolved": "https://registry.npmjs.org/expo-keep-awake/-/expo-keep-awake-57.0.2.tgz",
+diff --git a/package.json b/package.json
+index cee659f..2712986 100644
+--- a/package.json
++++ b/package.json
+@@ -18,7 +18,6 @@
+     "expo-constants": "~57.0.17",
+     "expo-crypto": "~57.0.4",
+     "expo-image": "~57.0.5",
+-    "expo-image-picker": "~57.0.20",
+     "expo-keep-awake": "~57.0.1",
+     "expo-linking": "~57.0.13",
+     "expo-router": "~57.0.28",
+diff --git a/services/adminRecipeService.ts b/services/adminRecipeService.ts
+index cef5278..f1a4640 100644
+--- a/services/adminRecipeService.ts
++++ b/services/adminRecipeService.ts
+@@ -6,7 +6,6 @@
+ import { supabase } from '../lib/supabase';
+ import { toRecipe, fromRecipe, type RichRecipe } from '../lib/recipeMapper';
+ import type { Recipe } from '../types';
+-import { MOCK_RECIPES } from '../constants/mockRecipes';
+ 
+ // Admins need to see drafts too, so this does NOT filter by status.
+ export async function getAllRecipesForAdmin(): Promise<Recipe[]> {
+@@ -52,99 +51,3 @@ export async function deleteRecipe(id: string): Promise<void> {
+   const { error } = await supabase.from('recipes').delete().eq('id', id);
+   if (error) throw error;
+ }
+-
+-/**
+- * Picks up a local image URI (from expo-image-picker) and uploads it to
+- * Cloudinary via an unsigned upload preset — no server/API key needed on the
+- * client, and Cloudinary's free tier is generous enough for this app's needs
+- * (this project doesn't use a separate storage service for images).
+- *
+- * NOTE: this deliberately uses XMLHttpRequest instead of fetch(). React
+- * Native's FormData accepts a special { uri, type, name } object to describe
+- * a local file part, but on some RN/Expo versions global fetch() is backed
+- * by a spec-compliant polyfill that doesn't understand that shape and throws
+- * "Unsupported FormDataPart implementation". XMLHttpRequest still goes
+- * through RN's native networking module, which handles it correctly.
+- */
+-export async function uploadRecipeImage(localUri: string): Promise<string> {
+-  const cloudName = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
+-  const uploadPreset = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+-
+-  if (!cloudName || !uploadPreset) {
+-    throw new Error(
+-      'Cloudinary is not configured. Set EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME and EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET in .env.'
+-    );
+-  }
+-
+-  const formData = new FormData();
+-  formData.append('file', {
+-    uri: localUri,
+-    type: 'image/jpeg',
+-    name: `recipe-${Date.now()}.jpg`,
+-  } as any);
+-  formData.append('upload_preset', uploadPreset);
+-
+-  return new Promise<string>((resolve, reject) => {
+-    const xhr = new XMLHttpRequest();
+-    xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`);
+-    xhr.onload = () => {
+-      if (xhr.status >= 200 && xhr.status < 300) {
+-        try {
+-          const data = JSON.parse(xhr.responseText);
+-          resolve(data.secure_url as string);
+-        } catch (err) {
+-          reject(new Error('Cloudinary upload succeeded but returned an unexpected response.'));
+-        }
+-      } else {
+-        reject(new Error(`Cloudinary upload failed (${xhr.status}): ${xhr.responseText}`));
+-      }
+-    };
+-    xhr.onerror = () => reject(new Error('Cloudinary upload failed: network error.'));
+-    xhr.send(formData);
+-  });
+-}
+-
+-/**
+- * One-time helper: copies the bundled MOCK_RECIPES into real database rows so
+- * they become visible/editable in the admin panel, and so the user-facing app
+- * is reading live data instead of the mock fallback.
+- *
+- * Each recipe keeps its own MOCK_RECIPES id as its row id, so there is a single
+- * stable id per recipe across both data sources — a favorite saved while
+- * offline/on mock data still resolves to the exact same row once it's seeded.
+- *
+- * Running this again is safe: existing rows are left untouched (no
+- * duplicates), only missing ones are created.
+- *
+- * Note: any recipe whose heroImageUrl is a local require() (not a plain
+- * string URL) can't be carried over as-is — the database needs a string, not a
+- * bundler asset reference. Those recipes are created with an empty photo;
+- * re-add the photo afterward via the normal Edit Recipe screen.
+- */
+-export async function seedMockRecipes(): Promise<{ created: number; skippedImages: number; alreadyExisted: number }> {
+-  const ids = MOCK_RECIPES.map((r) => r.id);
+-  const { data: existing, error: existingError } = await supabase
+-    .from('recipes')
+-    .select('id')
+-    .in('id', ids);
+-  if (existingError) throw existingError;
+-
+-  const existingIds = new Set((existing ?? []).map((r: { id: string }) => r.id));
+-  let skippedImages = 0;
+-
+-  const rows = MOCK_RECIPES.filter((r) => !existingIds.has(r.id)).map((recipe) => {
+-    const isLocalAsset = typeof recipe.heroImageUrl !== 'string';
+-    if (isLocalAsset) skippedImages++;
+-    return {
+-      ...fromRecipe({ ...recipe, heroImageUrl: isLocalAsset ? '' : recipe.heroImageUrl }),
+-      id: recipe.id,
+-    };
+-  });
+-
+-  if (rows.length > 0) {
+-    const { error } = await supabase.from('recipes').insert(rows);
+-    if (error) throw error;
+-  }
+-
+-  return { created: rows.length, skippedImages, alreadyExisted: existingIds.size };
+-}
+diff --git a/services/recipeService.ts b/services/recipeService.ts
+index 703c3e4..5aff431 100644
+--- a/services/recipeService.ts
++++ b/services/recipeService.ts
+@@ -6,7 +6,6 @@
+ import { supabase } from '../lib/supabase';
+ import { toRecipe } from '../lib/recipeMapper';
+ import type { Recipe, Region, MealType } from '../types';
+-import { MOCK_RECIPES, getMockRecipeById } from '../constants/mockRecipes';
+ 
+ const PAGE_SIZE = 20;
+ 
+@@ -14,18 +13,12 @@ const PAGE_SIZE = 20;
+ // filtering here too keeps admins' home feed identical to what users see.
+ const publishedRecipes = () => supabase.from('recipes').select('*').eq('status', 'published');
+ 
+-/**
+- * Runs a live database query. The bundled app content (constants/mockRecipes.ts)
+- * is used ONLY when the database can't be reached (offline / error). An empty
+- * result is a real answer: it means the admin has no published recipes (for
+- * example after deleting them), so we must not bring the built-in samples back.
+- */
+-async function withMockFallback<T extends unknown[]>(fn: () => Promise<T>, fallback: () => T): Promise<T> {
++async function withMockFallback<T extends unknown[]>(fn: () => Promise<T>, _fallback?: () => T): Promise<T> {
+   try {
+     return await fn();
+   } catch (err) {
+-    console.warn('[recipeService] Falling back to built-in recipe content:', err);
+-    return fallback();
++    console.warn('[recipeService] Could not load recipes:', err);
++    return [] as unknown as T;
+   }
+ }
+ 
+@@ -39,7 +32,7 @@ export async function getFeaturedRecipes(): Promise<Recipe[]> {
+       if (error) throw error;
+       return (data ?? []).map(toRecipe);
+     },
+-    () => MOCK_RECIPES.filter((r) => r.isFeatured)
++    () => []
+   );
+ }
+ 
+@@ -53,7 +46,7 @@ export async function getTrendingRecipes(): Promise<Recipe[]> {
+       if (error) throw error;
+       return (data ?? []).map(toRecipe);
+     },
+-    () => MOCK_RECIPES.filter((r) => r.isTrending)
++    () => []
+   );
+ }
+ 
+@@ -67,7 +60,7 @@ export async function getRecipesByRegion(region: Region): Promise<Recipe[]> {
+       if (error) throw error;
+       return (data ?? []).map(toRecipe);
+     },
+-    () => MOCK_RECIPES.filter((r) => r.region === region)
++    () => []
+   );
+ }
+ 
+@@ -80,7 +73,7 @@ export async function getRecipeById(id: string): Promise<Recipe | null> {
+     return null;
+   } catch (err) {
+     console.warn('[recipeService] Falling back to built-in recipe content:', err);
+-    return getMockRecipeById(id);
++    return null;
+   }
+ }
+ 
+@@ -102,7 +95,7 @@ export async function getRecipeFeedPage(page = 0) {
+     return { recipes, nextPage: hasMore ? page + 1 : undefined, hasMore };
+   } catch (err) {
+     console.warn('[recipeService] Falling back to built-in recipe content:', err);
+-    return { recipes: MOCK_RECIPES, nextPage: undefined, hasMore: false };
++    return { recipes: [] as Recipe[], nextPage: undefined, hasMore: false };
+   }
+ }
+ 
+@@ -116,6 +109,6 @@ export async function getRecipesByMealType(mealType: MealType): Promise<Recipe[]
+       if (error) throw error;
+       return (data ?? []).map(toRecipe);
+     },
+-    () => MOCK_RECIPES.filter((r) => r.mealTypes.includes(mealType))
++    () => []
+   );
+ }
+diff --git a/supabase/003_reset.sql b/supabase/003_reset.sql
+new file mode 100644
+index 0000000..8d09cb6
+--- /dev/null
++++ b/supabase/003_reset.sql
+@@ -0,0 +1,20 @@
++-- ONE-TIME RESET. Run in: Supabase Dashboard -> SQL Editor. THIS CANNOT BE UNDONE.
++-- Consider Dashboard -> Database -> Backups first.
++
++-- 1) Delete every recipe.
++delete from public.recipes;
++
++-- 2) Delete all accounts EXCEPT your admin (so you can still log in and add recipes).
++--    Replace the email below with yours. Deleting from auth.users cascades to
++--    profiles, feedback and notifications (all have ON DELETE CASCADE).
++delete from auth.users
++where lower(email) <> lower('YOUR-ADMIN-EMAIL@example.com');
++
++-- Optional: to remove EVERY account including yours, drop the WHERE clause above,
++-- then sign up again in the app and run:
++--   update public.profiles set role = 'admin' where email = 'you@example.com';
++
++-- 3) Check the result.
++select (select count(*) from public.recipes)  as recipes,
++       (select count(*) from auth.users)      as accounts,
++       (select count(*) from public.feedback) as feedback;
+diff --git a/types/index.ts b/types/index.ts
+index 836247b..37ef19c 100644
+--- a/types/index.ts
++++ b/types/index.ts
+@@ -63,7 +63,7 @@ export interface Recipe {
+   slug: string;
+   description: string;
+ 
+-  // string: remote URL (e.g. Cloudinary / Lorem Picsum) — render as { uri: heroImageUrl }
++  // string: remote URL (any https image link) — render as { uri: heroImageUrl }
+   // number: local asset from require('../assets/...') — render as-is, no { uri } wrapper
+   heroImageUrl: string | number;
+   videoLoopUrl?: string;
