@@ -100,7 +100,8 @@ export default function AdminRecipeListScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, paddingBottom: 12 }}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={{ gap: 8, paddingBottom: 12, alignItems: 'flex-start' }}
         >
           {RECIPE_CATEGORIES.map((category) => (
             <Pressable

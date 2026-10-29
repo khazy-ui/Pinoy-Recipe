@@ -62,7 +62,12 @@ export default function SearchScreen() {
           }}
         />
         <Text className="text-xs font-semibold text-[#8A6D4E] dark:text-[#B8A48C]">Meal type</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 8 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={{ gap: 8, paddingVertical: 8, alignItems: 'flex-start' }}
+        >
           {RECIPE_CATEGORIES.map((category: RecipeCategory) => (
             <Pressable
               key={category}

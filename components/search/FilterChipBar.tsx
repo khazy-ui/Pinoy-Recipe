@@ -23,7 +23,8 @@ export function FilterChipBar({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ gap: 8, paddingVertical: 8 }}
+      style={{ flexGrow: 0 }}
+      contentContainerStyle={{ gap: 8, paddingVertical: 8, alignItems: 'flex-start' }}
     >
       {MEAL_TYPES.map((mealType) => (
         <Chip

@@ -18,7 +18,8 @@ export function RegionChipRow({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+      style={{ flexGrow: 0 }}
+      contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: 'flex-start' }}
       className="mb-2"
     >
       {REGIONS.map((region) => (

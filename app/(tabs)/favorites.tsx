@@ -51,7 +51,12 @@ export default function FavoritesScreen() {
         </Text>
 
         <Text className="text-xs font-semibold text-[#8A6D4E] dark:text-[#B8A48C] mb-2">Location</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={{ gap: 8, paddingBottom: 8, alignItems: 'flex-start' }}
+        >
           {(['Luzon', 'Visayas', 'Mindanao'] as Region[]).map((region) => (
             <FilterChip
               key={region}
@@ -63,7 +68,12 @@ export default function FavoritesScreen() {
         </ScrollView>
 
         <Text className="text-xs font-semibold text-[#8A6D4E] dark:text-[#B8A48C] mb-2">Meal type</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={{ gap: 8, paddingBottom: 12, alignItems: 'flex-start' }}
+        >
           {RECIPE_CATEGORIES.map((category) => (
             <FilterChip
               key={category}
