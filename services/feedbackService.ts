@@ -123,7 +123,8 @@ function subscribeToTable<T>(
   table: 'feedback' | 'notifications',
   fetchList: () => Promise<T[]>,
   cb: (list: T[]) => void,
-  label: string
+  label: string,
+  onError?: (err: unknown) => void
 ): Unsubscribe {
   let active = true;
 
@@ -133,6 +134,7 @@ function subscribeToTable<T>(
       if (active) cb(list);
     } catch (err) {
       logErr(label)(err);
+      if (active) onError?.(err);
     }
   };
   load();
@@ -172,7 +174,11 @@ export async function submitFeedback(input: {
   check(error);
 }
 
-export function subscribeToMyFeedback(uid: string, cb: (list: Feedback[]) => void): Unsubscribe {
+export function subscribeToMyFeedback(
+  uid: string,
+  cb: (list: Feedback[]) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
   return subscribeToTable(
     'feedback',
     async () => {
@@ -185,7 +191,8 @@ export function subscribeToMyFeedback(uid: string, cb: (list: Feedback[]) => voi
       return (data ?? []).map(mapFeedback);
     },
     cb,
-    'subscribeToMyFeedback'
+    'subscribeToMyFeedback',
+    onError
   );
 }
 

@@ -18,8 +18,13 @@ import ScreenHeader from '../components/ScreenHeader';
 import ThemedBackground from '../components/ThemedBackground';
 import {
   submitFeedback,
+  subscribeToMyFeedback,
   CATEGORY_LABELS,
   MAX_FEEDBACK_LENGTH,
+  STATUS_LABELS,
+  STATUS_COLORS,
+  formatWhen,
+  type Feedback,
   type FeedbackCategory,
 } from '../services/feedbackService';
 
@@ -28,12 +33,38 @@ const MIN_LENGTH = 10;
 
 export default function FeedbackScreen() {
   const { user } = useAuthUser();
+  const userId = user?.id;
   const [category, setCategory] = useState<FeedbackCategory>('suggestion');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
-
+  const [feedbackItems, setFeedbackItems] = useState<Feedback[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(true);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   const tooShort = message.trim().length < MIN_LENGTH;
+
+  useEffect(() => {
+    if (!userId) {
+      setFeedbackItems([]);
+      setFeedbackLoading(false);
+      setFeedbackError(null);
+      return;
+    }
+
+    setFeedbackLoading(true);
+    return subscribeToMyFeedback(
+      userId,
+      (items) => {
+        setFeedbackItems(items);
+        setFeedbackLoading(false);
+        setFeedbackError(null);
+      },
+      (err) => {
+        setFeedbackLoading(false);
+        setFeedbackError(err instanceof Error ? err.message : 'Could not load your feedback.');
+      }
+    );
+  }, [userId]);
 
   const handleSend = async () => {
     if (sending) return;
@@ -137,6 +168,42 @@ export default function FeedbackScreen() {
           <Text className="text-xs text-[#8A6D4E] dark:text-[#B8A48C] text-center mt-4">
             Replies from our team will arrive in your Notifications.
           </Text>
+
+          <Text className="text-base font-semibold text-[#3A2A1A] dark:text-[#F5EBDD] mt-8 mb-3">
+            Your feedback
+          </Text>
+          {feedbackError ? (
+            <Text className="text-sm text-[#DC2626]">{`Could not load your feedback: ${feedbackError}`}</Text>
+          ) : feedbackLoading ? (
+            <ActivityIndicator color="#D97706" />
+          ) : feedbackItems.length === 0 ? (
+            <Text className="text-sm text-[#8A6D4E] dark:text-[#B8A48C]">
+              Feedback you send and its status will appear here.
+            </Text>
+          ) : (
+            feedbackItems.map((item) => (
+              <View key={item.id} className="bg-white dark:bg-[#2A211A] rounded-2xl p-4 mb-3">
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-sm font-semibold text-[#3A2A1A] dark:text-[#F5EBDD]">
+                    {CATEGORY_LABELS[item.category]}
+                  </Text>
+                  <Text className="text-xs font-semibold" style={{ color: STATUS_COLORS[item.status] }}>
+                    {STATUS_LABELS[item.status]}
+                  </Text>
+                </View>
+                <Text className="text-xs text-[#8A6D4E] dark:text-[#B8A48C] mb-2">
+                  {formatWhen(item.createdAt)}
+                </Text>
+                <Text className="text-sm text-[#3A2A1A] dark:text-[#F5EBDD]">{item.message}</Text>
+                {!!item.adminReply && (
+                  <View className="border-t border-[#F0E4D4] dark:border-[#3A2A1A] mt-3 pt-3">
+                    <Text className="text-xs font-semibold text-[#3A8A5A] mb-1">Team reply</Text>
+                    <Text className="text-sm text-[#3A2A1A] dark:text-[#F5EBDD]">{item.adminReply}</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </ThemedBackground>

@@ -1,5 +1,5 @@
 // components/search/FilterChipBar.tsx
-import { ScrollView, Pressable } from 'react-native';
+import { View, Pressable } from 'react-native';
 import type { MealType, DietaryTag } from '../../types';
 import { ResponsiveText as Text } from '../ResponsiveText';
 
@@ -20,12 +20,7 @@ export function FilterChipBar({
   onToggleDietaryTag,
 }: Props) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={{ flexGrow: 0 }}
-      contentContainerStyle={{ gap: 8, paddingVertical: 10, alignItems: 'center' }}
-    >
+    <View className="flex-row flex-wrap justify-between gap-y-2 py-2">
       {MEAL_TYPES.map((mealType) => (
         <Chip
           key={mealType}
@@ -42,7 +37,7 @@ export function FilterChipBar({
           onPress={() => onToggleDietaryTag(tag)}
         />
       ))}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -50,11 +45,11 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
   return (
     <Pressable
       onPress={onPress}
-      className={`px-3 py-2 rounded-full border ${
+      className={`w-[31%] min-h-[40px] items-center justify-center px-2 py-2 rounded-xl border ${
         active ? 'bg-[#D97706] border-[#D97706]' : 'bg-white dark:bg-[#2A211A] border-[#F0E4D4] dark:border-[#3A2A1A]'
       }`}
     >
-      <Text className={`text-xs ${active ? 'text-white' : 'text-[#3A2A1A] dark:text-[#F5EBDD]'}`}>{label}</Text>
+      <Text className={`text-xs text-center ${active ? 'text-white' : 'text-[#3A2A1A] dark:text-[#F5EBDD]'}`}>{label}</Text>
     </Pressable>
   );
 }

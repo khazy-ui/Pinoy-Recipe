@@ -1,17 +1,17 @@
 // app/admin/index.tsx
 //
-// "Add Recipe" tab: lists existing recipes (tap to edit, trash to delete) and
-// has a button to create a new one.
+// "Add Recipe" tab: lists existing recipes (tap to edit or delete) and has a
+// button to create a new one.
 import { useMemo, useState } from 'react';
-import { View, Pressable, FlatList, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Pressable, FlatList, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTopInset } from '../../hooks/useTopInset';
 import { useRouter } from 'expo-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Search as SearchIcon, X, ImageOff } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
+import { Plus, Search as SearchIcon, X, ImageOff } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import type { Region } from '../../types';
-import { getAllRecipesForAdmin, deleteRecipe } from '../../services/adminRecipeService';
+import { getAllRecipesForAdmin } from '../../services/adminRecipeService';
 import ThemedBackground from '../../components/ThemedBackground';
 import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../../components/ResponsiveText';
 import { getRecipeCategory, RECIPE_CATEGORIES, type RecipeCategory } from '../../lib/recipeCategories';
@@ -21,7 +21,6 @@ export default function AdminRecipeListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const topInset = useTopInset();
-  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [selectedRegion, setSelectedRegion] = useState<Region>();
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>();
@@ -47,25 +46,6 @@ export default function AdminRecipeListScreen() {
       );
     });
   }, [recipes, search, selectedRegion, selectedCategory]);
-
-  const handleDelete = (id: string, title: string) => {
-    Alert.alert('Delete Recipe', `Are you sure you want to delete "${title}"? This can't be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteRecipe(id);
-            // Refresh what users see too (Home, Search, Favorites), not just the admin list.
-            queryClient.invalidateQueries();
-          } catch (err: any) {
-            Alert.alert('Delete failed', err.message);
-          }
-        },
-      },
-    ]);
-  };
 
   return (
     <ThemedBackground>
@@ -172,9 +152,6 @@ export default function AdminRecipeListScreen() {
                     {item.region} · {item.foodType ?? 'Recipe'} · {item.status}
                   </Text>
                 </View>
-                <Pressable onPress={() => handleDelete(item.id, item.title)} hitSlop={8} className="p-2">
-                  <Trash2 size={18} color="#DC2626" />
-                </Pressable>
               </Pressable>
             );
           }}

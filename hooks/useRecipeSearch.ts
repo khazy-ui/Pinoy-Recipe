@@ -70,7 +70,8 @@ export function useRecipeSearch() {
       }
 
       if (filters.mealTypes.length > 0) {
-        const overlaps = (recipe.mealTypes ?? []).some((mt) => filters.mealTypes.includes(mt));
+        const overlaps = (recipe.mealTypes ?? []).some((mt) => filters.mealTypes.includes(mt)) ||
+          (filters.mealTypes.includes('Breakfast') && getRecipeCategory(recipe) === 'Breakfast');
         if (!overlaps) return false;
       }
 
@@ -81,7 +82,15 @@ export function useRecipeSearch() {
 
       return true;
     });
-  }, [allRecipes, deferredQuery, filters.region, filters.keyIngredient, filters.mealTypes, filters.dietaryTags]);
+  }, [
+    allRecipes,
+    deferredQuery,
+    filters.region,
+    filters.foodCategory,
+    filters.keyIngredient,
+    filters.mealTypes,
+    filters.dietaryTags,
+  ]);
 
   return {
     filters,

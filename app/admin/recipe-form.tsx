@@ -10,6 +10,7 @@ import {
   createRecipe,
   updateRecipe,
   getRecipeForAdmin,
+  deleteRecipe,
   uploadRecipeImage,
 } from '../../services/adminRecipeService';
 import { notifyAllUsersNewRecipe } from '../../services/recipeNotifications';
@@ -22,11 +23,6 @@ const REGIONS: Region[] = [
   'Luzon',
   'Visayas',
   'Mindanao',
-  'Ilocos',
-  'Bicol',
-  'Pampanga',
-  'Metro Manila',
-  'National',
 ];
 
 const DIFFICULTIES: Difficulty[] = ['Easy', 'Medium', 'Hard'];
@@ -37,6 +33,7 @@ const FOOD_TYPES = [
   'Appetizer',
   'Sweet',
   'Dessert',
+  'Breakfast',
 ] as const;
 type FoodType = (typeof FOOD_TYPES)[number];
 
@@ -113,6 +110,7 @@ export default function RecipeFormScreen() {
   const [steps, setSteps] = useState<CookStep[]>([]);
   const [stepTimerInputs, setStepTimerInputs] = useState<Record<string, StepTimerInput>>({});
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(isEditing);
 
   useEffect(() => {
@@ -124,7 +122,7 @@ export default function RecipeFormScreen() {
       setRegion(recipe.region ?? '');
       const savedFoodType = (recipe as Recipe & { foodType?: string }).foodType;
       setFoodType(
-        savedFoodType === 'Soup' || savedFoodType === 'Breakfast'
+        savedFoodType === 'Soup'
           ? 'Main Dish'
           : FOOD_TYPES.find((type) => type === savedFoodType) ?? ''
       );
@@ -227,7 +225,7 @@ export default function RecipeFormScreen() {
       return;
     }
     if (!foodType) {
-      Alert.alert('Missing food type', 'Please select what type of food this is, like Dessert or Main Dish.');
+      Alert.alert('Missing food type', 'Please select a food type, such as Main Dish, Dessert, or Breakfast.');
       return;
     }
     if (ingredients.length === 0 || ingredients.some((ing) => !ing.name.trim())) {
@@ -307,6 +305,29 @@ export default function RecipeFormScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDelete = () => {
+    if (!id) return;
+    Alert.alert('Delete recipe', `Are you sure you want to delete "${title}"? This can't be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setDeleting(true);
+          try {
+            await deleteRecipe(id);
+            queryClient.invalidateQueries();
+            router.back();
+          } catch (err) {
+            Alert.alert('Delete failed', err instanceof Error ? err.message : 'Could not delete the recipe.');
+          } finally {
+            setDeleting(false);
+          }
+        },
+      },
+    ]);
   };
 
   if (loading) {
@@ -581,9 +602,20 @@ export default function RecipeFormScreen() {
           <ToggleRow label="Notify all users about this recipe" value={notifyUsers} onValueChange={setNotifyUsers} />
         )}
 
+        {isEditing && (
+          <Pressable
+            onPress={handleDelete}
+            disabled={saving || deleting}
+            className="flex-row items-center justify-center gap-2 bg-white dark:bg-[#2A211A] border border-[#DC2626] rounded-2xl py-4 items-center mt-3"
+          >
+            {deleting ? <ActivityIndicator color="#DC2626" /> : <Trash2 size={18} color="#DC2626" />}
+            <Text className="text-[#DC2626] font-semibold">Delete recipe</Text>
+          </Pressable>
+        )}
+
         <Pressable
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || deleting}
           className="bg-[#D97706] rounded-2xl py-4 items-center mt-4"
         >
           {saving ? <ActivityIndicator color="white" /> : <Text className="text-white font-semibold">Save Recipe</Text>}

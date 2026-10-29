@@ -1,15 +1,7 @@
 // types/index.ts
 // Core data model for Pinoy Recipes
 
-export type Region =
-  | 'Luzon'
-  | 'Visayas'
-  | 'Mindanao'
-  | 'Ilocos'
-  | 'Bicol'
-  | 'Pampanga'
-  | 'Metro Manila'
-  | 'National';
+export type Region = 'Luzon' | 'Visayas' | 'Mindanao';
 
 export type MealType = 'Ulam' | 'Merienda' | 'Kakanin' | 'Fiesta Specials' | 'Breakfast' | 'Soup';
 
@@ -115,7 +107,7 @@ export interface FavoritesState {
 export interface SearchFilters {
   query: string;
   region?: Region;
-  foodCategory?: 'Main Dish' | 'Side Dish' | 'Appetizer' | 'Sweet' | 'Dessert';
+  foodCategory?: 'Main Dish' | 'Side Dish' | 'Appetizer' | 'Sweet' | 'Dessert' | 'Breakfast';
   mealTypes: MealType[];
   dietaryTags: DietaryTag[];
   keyIngredient?: string;
