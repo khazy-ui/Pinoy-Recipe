@@ -107,7 +107,7 @@ export default function AdminRecipeListScreen() {
             <Pressable
               key={category}
               onPress={() => setSelectedCategory((current) => current === category ? undefined : category)}
-              className={`min-w-[96px] min-h-[40px] shrink-0 items-center justify-center rounded-xl border px-3 py-2 ${
+              className={` shrink-0 items-center justify-center rounded-xl border px-3 py-2 ${
                 selectedCategory === category
                   ? 'bg-[#D97706] border-[#D97706]'
                   : 'bg-white dark:bg-[#2A211A] border-[#F0E4D4] dark:border-[#3A2A1A]'
