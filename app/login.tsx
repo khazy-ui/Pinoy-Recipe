@@ -100,7 +100,7 @@ function getAuthErrorMessage(err: any, mode: Mode): string {
     case 'email_exists':
       return 'An account with this email already exists. Try signing in instead.';
     case 'weak_password':
-      return 'Please choose a stronger password (at least 6 characters).';
+      return 'Please choose a stronger password (at least 8 characters).';
     default:
       return mode === 'signIn'
         ? 'Unable to sign in. Please try again.'
@@ -178,6 +178,10 @@ export default function LoginScreen() {
   const handleEmailSubmit = async () => {
     if (!email.trim() || !password) {
       Alert.alert('Missing info', 'Please enter both email and password.');
+      return;
+    }
+    if (mode === 'signUp' && password.length < 8) {
+      Alert.alert('Password too short', 'Use at least 8 characters for your password.');
       return;
     }
     setBusy(true);
