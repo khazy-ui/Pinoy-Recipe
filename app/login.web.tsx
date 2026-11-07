@@ -38,8 +38,23 @@ const FONT =
   'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 function authErrorMessage(err: any): string {
-  if (err?.name === 'AuthRetryableFetchError' || /network request failed|failed to fetch/i.test(err?.message ?? '')) {
+  const message = String(err?.message ?? '');
+  if (
+    err?.name === 'AuthRetryableFetchError' ||
+    /network request failed|failed to fetch|network error/i.test(message)
+  ) {
     return 'Network error. Check your connection and try again.';
+  }
+  if (
+    err?.status === 429 ||
+    err?.code === 'over_request_rate_limit' ||
+    err?.code === 'over_email_send_rate_limit' ||
+    /too many (requests|attempts)|rate.?limit|security purposes/i.test(message)
+  ) {
+    return 'Too many attempts. Please wait a moment and try again.';
+  }
+  if (/invalid login credentials|invalid credentials/i.test(message)) {
+    return 'The email or password you entered is incorrect.';
   }
   switch (err?.code as string | undefined) {
     case 'invalid_credentials':
@@ -48,9 +63,6 @@ function authErrorMessage(err: any): string {
     case 'email_address_invalid':
     case 'validation_failed':
       return 'Please enter a valid email address.';
-    case 'over_request_rate_limit':
-    case 'over_email_send_rate_limit':
-      return 'Too many attempts. Please wait a moment and try again.';
     case 'user_banned':
       return 'This account has been disabled.';
     case 'email_not_confirmed':
@@ -233,6 +245,7 @@ export default function LoginWeb() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     setError(null);
     setNotice(null);
     if (!email.trim() || !password) {

@@ -79,8 +79,23 @@ function getPasswordStrength(pw: string): Strength {
 // deliberate security choice, so attackers can't tell which emails exist),
 // so both are handled the same user-facing way here.
 function getAuthErrorMessage(err: any, mode: Mode): string {
-  if (err?.name === 'AuthRetryableFetchError' || /network request failed/i.test(err?.message ?? '')) {
+  const message = String(err?.message ?? '');
+  if (
+    err?.name === 'AuthRetryableFetchError' ||
+    /network request failed|failed to fetch|network error/i.test(message)
+  ) {
     return 'Network error. Check your connection and try again.';
+  }
+  if (
+    err?.status === 429 ||
+    err?.code === 'over_request_rate_limit' ||
+    err?.code === 'over_email_send_rate_limit' ||
+    /too many (requests|attempts)|rate.?limit|security purposes/i.test(message)
+  ) {
+    return 'Too many attempts. Please wait a moment and try again.';
+  }
+  if (/invalid login credentials|invalid credentials/i.test(message)) {
+    return 'The email or password you entered is incorrect. Please try again.';
   }
   switch (err?.code as string | undefined) {
     case 'invalid_credentials':
@@ -89,9 +104,6 @@ function getAuthErrorMessage(err: any, mode: Mode): string {
     case 'email_address_invalid':
     case 'validation_failed':
       return 'Please enter a valid email address.';
-    case 'over_request_rate_limit':
-    case 'over_email_send_rate_limit':
-      return 'Too many attempts. Please wait a moment and try again.';
     case 'user_banned':
       return 'This account has been disabled. Contact support if you think this is a mistake.';
     case 'email_not_confirmed':
@@ -176,6 +188,7 @@ export default function LoginScreen() {
   };
 
   const handleEmailSubmit = async () => {
+    if (busy) return;
     if (!email.trim() || !password) {
       Alert.alert('Missing info', 'Please enter both email and password.');
       return;
