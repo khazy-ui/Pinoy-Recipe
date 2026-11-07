@@ -134,7 +134,7 @@ export default function AdminRecipeListScreen() {
               <Text className="text-[#8A6D4E] dark:text-[#B8A48C] text-center mt-8">
                 No recipes match these search and filter options.
               </Text>
-            ) : null
+            ) : undefined
           }
           contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
           renderItem={({ item }) => {
