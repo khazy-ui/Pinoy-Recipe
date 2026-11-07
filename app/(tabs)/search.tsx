@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import { Search as SearchIcon } from 'lucide-react-native';
 import { useRecipeSearch } from '../../hooks/useRecipeSearch';
 import { RecipeCard } from '../../components/recipe/RecipeCard';
-import { FilterChipBar } from '../../components/search/FilterChipBar';
 import { RegionChipRow } from '../../components/recipe/RegionChipRow';
 import ThemedBackground from '../../components/ThemedBackground';
 import { useRouter } from 'expo-router';
@@ -22,7 +21,6 @@ export default function SearchScreen() {
     setQuery,
     setRegion,
     setFoodCategory,
-    toggleMealType,
     results,
     isLoading,
     resultCount,
@@ -83,10 +81,6 @@ export default function SearchScreen() {
             </Pressable>
           ))}
         </ScrollView>
-        <FilterChipBar
-          selectedMealTypes={filters.mealTypes}
-          onToggleMealType={toggleMealType}
-        />
 
         <Text className="text-xs text-[#8A6D4E] dark:text-[#B8A48C] my-2">
           {isLoading ? 'Searching...' : `${resultCount} ${resultCount === 1 ? 'Result' : 'Results'}`}
