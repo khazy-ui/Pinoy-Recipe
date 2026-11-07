@@ -1,4 +1,4 @@
-// app/admin-recipe-form.tsx
+// app/admin/recipe-form.tsx
 import { useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -12,12 +12,15 @@ import {
   getRecipeForAdmin,
   deleteRecipe,
   uploadRecipeImage,
-} from '../services/adminRecipeService';
-import { notifyAllUsersNewRecipe } from '../services/recipeNotifications';
-import { useThemeStore } from '../store/useThemeStore';
-import ThemedBackground from '../components/ThemedBackground';
-import type { Region, Difficulty, Recipe, Ingredient, CookStep } from '../types';
-import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../components/ResponsiveText';
+} from '../../services/adminRecipeService';
+import { notifyAllUsersNewRecipe } from '../../services/recipeNotifications';
+import { useThemeStore } from '../../store/useThemeStore';
+import ThemedBackground from '../../components/ThemedBackground';
+import type { Region, Difficulty, Recipe, Ingredient, CookStep } from '../../types';
+import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../../components/ResponsiveText';
+
+// If this screen ever crashes, show the error here instead of silently going back.
+export { ErrorBoundary } from 'expo-router';
 
 const REGIONS: Region[] = [
   'Luzon',

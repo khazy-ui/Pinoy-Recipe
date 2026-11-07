@@ -53,7 +53,7 @@ export default function AdminRecipeListScreen() {
         <View className="flex-row items-center justify-between mb-3">
           <Text className="text-xl font-bold text-[#3A2A1A] dark:text-[#F5EBDD]">Manage Recipes</Text>
           <Pressable
-            onPress={() => router.push('/admin-recipe-form')}
+            onPress={() => router.push('/admin/recipe-form')}
             className="flex-row items-center gap-1 bg-[#D97706] rounded-full px-3 py-2"
           >
             <Plus size={16} color="white" />
@@ -141,7 +141,7 @@ export default function AdminRecipeListScreen() {
             const imageSource = resolveRecipeImageSource(item.heroImageUrl);
             return (
               <Pressable
-                onPress={() => router.push({ pathname: '/admin-recipe-form', params: { id: item.id } })}
+                onPress={() => router.push({ pathname: '/admin/recipe-form', params: { id: item.id } })}
                 className="bg-white dark:bg-[#2A211A] rounded-2xl overflow-hidden mb-3 flex-row items-center"
               >
                 {imageSource ? (

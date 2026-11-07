@@ -23,7 +23,7 @@ const queryClient = new QueryClient({
 function ThemedStatusBar() {
   const isDark = useThemeStore((s) => s.isDark);
   const segments = useSegments();
-  const alwaysLight = segments[0] === 'login' || segments[0] === 'admin' || segments[0] === 'admin-recipe-form';
+  const alwaysLight = segments[0] === 'login' || segments[0] === 'admin';
   return <StatusBar style={isDark && !alwaysLight ? 'light' : 'dark'} />;
 }
 
@@ -38,6 +38,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // fresh sign-in) instead of fighting the user's normal in-app navigation
   // on every segment change.
   const routedForUid = useRef<string | null>(null);
+
+  // Always holds the latest route. The async role check below runs after a network
+  // call, so reading `segments` directly there would use a stale value and could
+  // yank the user back to /admin after they've already navigated elsewhere.
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
 
   useEffect(() => {
     // Wait until the root navigator has actually mounted before calling
@@ -75,7 +81,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       // takes effect the moment they reopen the app, without needing to
       // sign out and back in.
       const profile = await ensureUserProfile(user);
-      const inAdminSection = segments[0] === 'admin';
+      const inAdminSection = segmentsRef.current[0] === 'admin';
 
       if (profile.role === 'admin' && !inAdminSection) {
         router.replace('/admin');
@@ -109,7 +115,6 @@ export default function RootLayout() {
           <Stack.Screen name="reset-password" options={{ gestureEnabled: false }} />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="admin" />
-          <Stack.Screen name="admin-recipe-form" />
           <Stack.Screen name="recipe/[id]" options={{ headerShown: false }} />
         </Stack>
       </AuthGate>
