@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { toRecipe, fromRecipe, type RichRecipe } from '../lib/recipeMapper';
 import type { Recipe } from '../types';
 import * as Crypto from 'expo-crypto';
+import { File } from 'expo-file-system';
 
 // Admins need to see drafts too, so this does NOT filter by status.
 export async function getAllRecipesForAdmin(): Promise<RichRecipe[]> {
@@ -54,18 +55,17 @@ export async function deleteRecipe(id: string): Promise<void> {
 }
 
 export async function uploadRecipeImage(localUri: string, selectedMimeType?: string): Promise<string> {
-  const response = await fetch(localUri);
-  if (!response.ok) {
-    throw new Error(`Could not read the selected photo (${response.status}).`);
-  }
-
-  const image = await response.arrayBuffer();
-  const mimeType =
-    selectedMimeType ?? response.headers.get('content-type')?.split(';')[0] ?? 'image/jpeg';
+  const mimeType = selectedMimeType ?? 'image/jpeg';
   if (!mimeType.startsWith('image/')) {
     throw new Error('The selected file is not an image.');
   }
 
+  const file = new File(localUri);
+  if (!file.exists) {
+    throw new Error('Could not read the selected photo from the device.');
+  }
+
+  const image = await file.arrayBuffer();
   const extension = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
   const path = `${Crypto.randomUUID()}.${extension}`;
   const { error } = await supabase.storage

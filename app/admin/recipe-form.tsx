@@ -116,7 +116,11 @@ export default function RecipeFormScreen() {
   useEffect(() => {
     if (!id) return;
     getRecipeForAdmin(id).then((recipe) => {
-      if (!recipe) return;
+      if (!recipe) {
+        Alert.alert('Recipe not found', 'This recipe could not be loaded.');
+        setLoading(false);
+        return;
+      }
       setTitle(recipe.title ?? '');
       setDescription(recipe.description ?? '');
       setRegion(recipe.region ?? '');
@@ -150,6 +154,9 @@ export default function RecipeFormScreen() {
           ])
         )
       );
+      setLoading(false);
+    }).catch((err: any) => {
+      Alert.alert('Load failed', err?.message ?? 'Could not load this recipe.');
       setLoading(false);
     });
   }, [id]);
@@ -236,6 +243,13 @@ export default function RecipeFormScreen() {
       Alert.alert('Missing steps', 'Add at least one cooking step, and make sure each has instructions.');
       return;
     }
+    const prepMinutes = Number(prepTimeMinutes);
+    const cookMinutes = Number(cookTimeMinutes);
+    const servings = Number(baseServings);
+    if (!Number.isFinite(prepMinutes) || prepMinutes < 0 || !Number.isFinite(cookMinutes) || cookMinutes < 0 || !Number.isInteger(servings) || servings < 1) {
+      Alert.alert('Invalid numbers', 'Prep and cook time must be zero or greater, and servings must be a whole number greater than zero.');
+      return;
+    }
     const timedSteps = steps.map((step) => ({
       ...step,
       timerSeconds: getTimerSeconds(stepTimerInputs[step.id] ?? { minutes: '', seconds: '' }),
@@ -261,17 +275,19 @@ export default function RecipeFormScreen() {
 
       const payload: Partial<Recipe> & { foodType: FoodType } = {
         title: title.trim(),
+        slug: title.trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
         description: description.trim(),
         region,
         foodType,
-        prepTimeMinutes: Number(prepTimeMinutes) || 0,
-        cookTimeMinutes: Number(cookTimeMinutes) || 0,
-        baseServings: Number(baseServings) || 1,
+        prepTimeMinutes: prepMinutes,
+        cookTimeMinutes: cookMinutes,
+        baseServings: servings,
         difficulty,
         heroImageUrl,
         isFeatured,
         isTrending,
         status: published ? 'published' : 'draft',
+        publishedAt: published ? new Date().toISOString() : undefined,
         ingredients,
         steps: timedSteps.map((step) => ({
           ...step,
