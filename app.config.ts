@@ -5,7 +5,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'pinoy-recipes',
   slug: 'pinoy-recipes',
   scheme: 'pinoyrecipes',
-    extra: {
+  extra: {
     eas: {
       projectId: '3ce8944e-babf-446d-a0ec-0f001cb26934',
     },
@@ -17,6 +17,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     'expo-router',
     'expo-image',
+    'expo-secure-store',
+    'expo-status-bar',
     [
       'expo-image-picker',
       {
