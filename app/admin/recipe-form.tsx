@@ -317,10 +317,12 @@ export default function RecipeFormScreen() {
         } catch (err: any) {
           Alert.alert('Recipe saved', `But the notification couldn't be sent: ${err.message}`);
         }
+      } else {
+        Alert.alert('Recipe saved', isEditing ? 'Your recipe changes have been saved.' : 'The new recipe has been added.');
       }
       router.back();
     } catch (err: any) {
-      Alert.alert('Save failed', err.message);
+      Alert.alert('Save failed', err?.message ?? 'Could not save the recipe.');
     } finally {
       setSaving(false);
     }

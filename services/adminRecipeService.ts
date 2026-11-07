@@ -26,13 +26,34 @@ export async function getRecipeForAdmin(id: string): Promise<Recipe | null> {
 }
 
 export async function createRecipe(data: Partial<RichRecipe>): Promise<string> {
-  const { data: session } = await supabase.auth.getSession();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  const session = sessionData.session;
+  if (!session) {
+    throw new Error('Your admin session has expired. Please sign in again, then add the recipe.');
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', session.user.id)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  if (profile?.role !== 'admin') {
+    throw new Error('Your account does not have admin permission to add recipes.');
+  }
+
   const row = fromRecipe(data);
-  if (row.created_by_admin_id === undefined && session.session) {
-    row.created_by_admin_id = session.session.user.id;
+  if (row.created_by_admin_id === undefined) {
+    row.created_by_admin_id = session.user.id;
   }
   const { data: created, error } = await supabase.from('recipes').insert(row).select('id').single();
-  if (error) throw error;
+  if (error) {
+    if (error.message?.toLowerCase().includes('column') && error.message?.toLowerCase().includes('does not exist')) {
+      throw new Error('The recipe database is missing a required column. Run the SQL migrations in supabase/002_extras.sql.');
+    }
+    throw error;
+  }
   return created.id as string;
 }
 
