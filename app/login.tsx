@@ -13,9 +13,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ImageBackground,
+  StyleSheet,
   useWindowDimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../components/ResponsiveText';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -245,17 +246,19 @@ export default function LoginScreen() {
 
   if (checkingSession) {
     return (
-      <ImageBackground source={LOGIN_BG} style={{ flex: 1 }} resizeMode="cover">
+      <View style={{ flex: 1 }}>
+        <Image source={LOGIN_BG} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
         <StatusBar style="dark" />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#D97706" />
         </View>
-      </ImageBackground>
+      </View>
     );
   }
 
   return (
-    <ImageBackground source={LOGIN_BG} style={{ flex: 1 }} resizeMode="cover">
+    <View style={{ flex: 1 }}>
+      <Image source={LOGIN_BG} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
       <StatusBar style="dark" />
       <KeyboardAvoidingView
         className="flex-1"
@@ -364,6 +367,6 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </ImageBackground>
+    </View>
   );
 }
