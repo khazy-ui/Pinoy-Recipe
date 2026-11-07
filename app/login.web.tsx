@@ -132,7 +132,7 @@ function BrandPanel() {
         }}
       />
 
-      {/* Logo in a white circle */}
+      {/* Logo filling the circle (no white gap) */}
       <div
         style={{
           position: 'absolute',
@@ -150,7 +150,7 @@ function BrandPanel() {
           justifyContent: 'center',
         }}
       >
-        <Image source={LOGO} style={{ width: '82%', height: '82%' } as any} resizeMode="contain" />
+        <Image source={LOGO} style={{ width: '100%', height: '100%' } as any} resizeMode="cover" />
       </div>
 
       {/* Title, tagline and feature chips */}
