@@ -53,7 +53,7 @@ export default function AdminRecipeListScreen() {
         <View className="flex-row items-center justify-between mb-3">
           <Text className="text-xl font-bold text-[#3A2A1A] dark:text-[#F5EBDD]">Manage Recipes</Text>
           <Pressable
-            onPress={() => router.push('/admin/recipe-form')}
+            onPress={() => router.navigate({ pathname: '/admin/recipe-form' })}
             className="flex-row items-center gap-1 bg-[#D97706] rounded-full px-3 py-2"
           >
             <Plus size={16} color="white" />

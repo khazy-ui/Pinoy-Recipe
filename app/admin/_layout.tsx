@@ -117,7 +117,14 @@ export default function AdminLayout() {
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
         }}
       />
-      <Tabs.Screen name="recipe-form" options={{ href: null }} />
+      <Tabs.Screen
+        name="recipe-form"
+        options={{
+          href: null,
+          headerShown: false,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
     </Tabs>
   );
 }
