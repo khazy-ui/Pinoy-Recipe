@@ -23,7 +23,6 @@ export default function SearchScreen() {
     setRegion,
     setFoodCategory,
     toggleMealType,
-    toggleDietaryTag,
     results,
     isLoading,
     resultCount,
@@ -86,9 +85,7 @@ export default function SearchScreen() {
         </ScrollView>
         <FilterChipBar
           selectedMealTypes={filters.mealTypes}
-          selectedDietaryTags={filters.dietaryTags}
           onToggleMealType={toggleMealType}
-          onToggleDietaryTag={toggleDietaryTag}
         />
 
         <Text className="text-xs text-[#8A6D4E] dark:text-[#B8A48C] my-2">

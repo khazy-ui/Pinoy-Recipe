@@ -1,24 +1,16 @@
 // components/search/FilterChipBar.tsx
 import { ScrollView, Pressable } from 'react-native';
-import type { MealType, DietaryTag } from '../../types';
+import type { MealType } from '../../types';
 import { ResponsiveText as Text } from '../ResponsiveText';
 
 const MEAL_TYPES: MealType[] = ['Ulam', 'Merienda', 'Kakanin', 'Fiesta Specials', 'Breakfast', 'Soup'];
-const DIETARY_TAGS: DietaryTag[] = ['Vegetarian', 'Vegan', 'Pork-Free', 'Seafood', 'Gluten-Free'];
 
 interface Props {
   selectedMealTypes: MealType[];
-  selectedDietaryTags: DietaryTag[];
   onToggleMealType: (mealType: MealType) => void;
-  onToggleDietaryTag: (tag: DietaryTag) => void;
 }
 
-export function FilterChipBar({
-  selectedMealTypes,
-  selectedDietaryTags,
-  onToggleMealType,
-  onToggleDietaryTag,
-}: Props) {
+export function FilterChipBar({ selectedMealTypes, onToggleMealType }: Props) {
   return (
     <ScrollView
       horizontal
@@ -32,14 +24,6 @@ export function FilterChipBar({
           label={mealType}
           active={selectedMealTypes.includes(mealType)}
           onPress={() => onToggleMealType(mealType)}
-        />
-      ))}
-      {DIETARY_TAGS.map((tag) => (
-        <Chip
-          key={tag}
-          label={tag}
-          active={selectedDietaryTags.includes(tag)}
-          onPress={() => onToggleDietaryTag(tag)}
         />
       ))}
     </ScrollView>
