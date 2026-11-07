@@ -23,7 +23,7 @@ const queryClient = new QueryClient({
 function ThemedStatusBar() {
   const isDark = useThemeStore((s) => s.isDark);
   const segments = useSegments();
-  const alwaysLight = segments[0] === 'login' || segments[0] === 'admin';
+  const alwaysLight = segments[0] === 'login' || segments[0] === 'admin' || segments[0] === 'admin-recipe-form';
   return <StatusBar style={isDark && !alwaysLight ? 'light' : 'dark'} />;
 }
 
@@ -109,6 +109,7 @@ export default function RootLayout() {
           <Stack.Screen name="reset-password" options={{ gestureEnabled: false }} />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="admin" />
+          <Stack.Screen name="admin-recipe-form" />
           <Stack.Screen name="recipe/[id]" options={{ headerShown: false }} />
         </Stack>
       </AuthGate>
