@@ -219,7 +219,7 @@ export default function AdminFeedbackScreen() {
                 <TextInput
                   value={reply}
                   onChangeText={setReply}
-                  placeholder="e.g. We added the Kare-Kare recipe you asked for. It's live in the next update."
+                  placeholder="Message here.........."
                   placeholderTextColor="#B8A48C"
                   multiline
                   maxLength={1000}
