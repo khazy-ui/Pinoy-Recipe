@@ -32,6 +32,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
+  console.log('[route]', segments.join('/'));
 
   // Tracks which signed-in uid we've already role-routed, so the role check
   // below runs once per session (cold launch with a restored session, or a
