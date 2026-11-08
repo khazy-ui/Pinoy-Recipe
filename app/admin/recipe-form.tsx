@@ -3,8 +3,6 @@ import { useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import * as ImagePicker from 'expo-image-picker';
-import * as Crypto from 'expo-crypto';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react-native';
 import {
   createRecipe,
@@ -16,6 +14,7 @@ import {
 import { notifyAllUsersNewRecipe } from '../../services/recipeNotifications';
 import { useThemeStore } from '../../store/useThemeStore';
 import ThemedBackground from '../../components/ThemedBackground';
+import { useTopInset } from '../../hooks/useTopInset';
 import type { Region, Difficulty, Recipe, Ingredient, CookStep } from '../../types';
 import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../../components/ResponsiveText';
 
@@ -50,7 +49,13 @@ function getTimerSeconds(input: StepTimerInput): number | undefined | null {
   return Number.isSafeInteger(totalSeconds) && totalSeconds > 0 ? totalSeconds : null;
 }
 
-const newId = () => Crypto.randomUUID();
+// Plain-JS UUID v4. Ids only need to be unique strings, and this avoids loading
+// a native module (expo-crypto) when the screen opens.
+const newId = () =>
+  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.floor(Math.random() * 16);
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
 
 // Maps unicode fraction glyphs (¼, ⅘, etc.) to their decimal value, so admins
 // can paste/type them for ingredient quantities instead of only plain numbers.
@@ -90,6 +95,7 @@ export default function RecipeFormScreen() {
   const queryClient = useQueryClient();
   const isEditing = !!id;
   const isDark = useThemeStore((s) => s.isDark);
+  const topInset = useTopInset();
   // Inline-style colors (pills, checkbox, icons) can't use `dark:` classes.
   const cardBg = isDark ? '#2A211A' : 'white';
   const inkColor = isDark ? '#F5EBDD' : '#3A2A1A';
@@ -204,6 +210,7 @@ export default function RecipeFormScreen() {
 
   const pickImage = async () => {
     try {
+      const ImagePicker = await import('expo-image-picker');
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         Alert.alert('Permission needed', 'Allow photo library access to upload a recipe photo.');
@@ -211,7 +218,7 @@ export default function RecipeFormScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ['images'] as any,
         quality: 0.8,
         aspect: [4, 3],
         allowsEditing: true,
@@ -290,7 +297,7 @@ export default function RecipeFormScreen() {
         isFeatured,
         isTrending,
         status: published ? 'published' : 'draft',
-        publishedAt: published ? new Date().toISOString() : undefined,
+        publishedAt: published && !wasPublished ? new Date().toISOString() : undefined,
         ingredients,
         steps: timedSteps.map((step) => ({
           ...step,
@@ -360,8 +367,12 @@ export default function RecipeFormScreen() {
   }
 
   return (
-    <ThemedBackground safeTop>
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
+    <ThemedBackground>
+      <ScrollView
+        className="flex-1"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: 16, paddingTop: topInset + 16, paddingBottom: 60 }}
+      >
         <View className="flex-row items-center gap-3 mb-4">
           <Pressable
             onPress={() => router.back()}
