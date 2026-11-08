@@ -11,7 +11,6 @@ import {
   deleteRecipe,
   uploadRecipeImage,
 } from '../../services/adminRecipeService';
-import { notifyAllUsersNewRecipe } from '../../services/recipeNotifications';
 import { useThemeStore } from '../../store/useThemeStore';
 import ThemedBackground from '../../components/ThemedBackground';
 import { useTopInset } from '../../hooks/useTopInset';
@@ -319,6 +318,7 @@ export default function RecipeFormScreen() {
       // Only offer/send a notification the first time a recipe becomes visible to users.
       if (notifyUsers && published && !wasPublished) {
         try {
+          const { notifyAllUsersNewRecipe } = await import('../../services/recipeNotifications');
           const count = await notifyAllUsersNewRecipe(title.trim());
           Alert.alert('Recipe saved', `Notified ${count} user${count === 1 ? '' : 's'}.`);
         } catch (err: any) {
