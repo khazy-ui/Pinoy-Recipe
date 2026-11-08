@@ -18,6 +18,7 @@ import {
   subscribeToAllFeedback,
   replyToFeedback,
   updateFeedbackStatus,
+  markFeedbackSeen,
   formatWhen,
   CATEGORY_LABELS,
   STATUS_LABELS,
@@ -63,6 +64,10 @@ export default function AdminFeedbackScreen() {
   );
 
   const open = (f: Feedback) => {
+    // First time an admin opens it, tell the user it's being reviewed (done once, by the database).
+    if (!f.seenAt) {
+      markFeedbackSeen(f.id).catch((err) => console.warn('[markFeedbackSeen]', err));
+    }
     setSelected(f);
     setReply(f.adminReply ?? '');
     setStatus(f.status === 'new' ? 'in_progress' : f.status);
@@ -219,7 +224,7 @@ export default function AdminFeedbackScreen() {
                 <TextInput
                   value={reply}
                   onChangeText={setReply}
-                  placeholder="Message here.........."
+                  placeholder="e.g. We added the Kare-Kare recipe you asked for. It's live in the next update."
                   placeholderTextColor="#B8A48C"
                   multiline
                   maxLength={1000}
@@ -240,7 +245,7 @@ export default function AdminFeedbackScreen() {
                 </Pressable>
                 <Pressable onPress={handleStatusOnly} disabled={busy} className="py-3 items-center">
                   <Text className="text-[#8A6D4E] dark:text-[#B8A48C] font-medium">
-                    Save status only (no notification)
+                    Save status only (user still gets a status update)
                   </Text>
                 </Pressable>
               </ScrollView>

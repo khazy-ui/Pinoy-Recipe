@@ -23,6 +23,7 @@ export interface Feedback {
   createdAt: number; // ms
   adminReply?: string;
   repliedAt?: number; // ms
+  seenAt?: number; // ms, when an admin first opened it
 }
 
 export interface AppNotification {
@@ -75,6 +76,7 @@ const mapFeedback = (row: any): Feedback => ({
   createdAt: toMs(row.created_at),
   adminReply: row.admin_reply ?? undefined,
   repliedAt: row.replied_at ? toMs(row.replied_at) : undefined,
+  seenAt: row.seen_at ? toMs(row.seen_at) : undefined,
 });
 
 const mapNotification = (row: any): AppNotification => ({
@@ -266,9 +268,18 @@ export async function updateFeedbackStatus(id: string, status: FeedbackStatus) {
 }
 
 /**
- * Saves the admin's reply on the feedback AND creates a notification for the
- * user. Done by one database function (reply_to_feedback) so both happen
- * together or not at all, and only admins are allowed to call it.
+ * Marks a feedback as opened by an admin. The database only acts the first time,
+ * and notifies the user ("Your feedback is being reviewed") if it's still new.
+ */
+export async function markFeedbackSeen(id: string) {
+  const { error } = await supabase.rpc('mark_feedback_seen', { p_id: id });
+  check(error);
+}
+
+/**
+ * Saves the admin's reply and status. The user's notification is created
+ * automatically by a database trigger (see supabase/005_feedback_auto_notify.sql).
+ * Only admins are allowed to call this.
  */
 export async function replyToFeedback(feedback: Feedback, reply: string, status: FeedbackStatus) {
   const { error } = await supabase.rpc('reply_to_feedback', {
