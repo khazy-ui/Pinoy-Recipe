@@ -6,7 +6,7 @@
 // can always be bypassed.
 //
 // Bottom tab bar: Add Recipe, User Feedback, Send Notification, Profile.
-// recipe-form is a real route but is hidden from the tab bar via `href: null`.
+// The recipe form lives at app/recipe-form.tsx (a normal full-screen page, outside the tabs).
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
@@ -115,14 +115,6 @@ export default function AdminLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="recipe-form"
-        options={{
-          href: null,
-          headerShown: false,
-          tabBarStyle: { display: 'none' },
         }}
       />
     </Tabs>

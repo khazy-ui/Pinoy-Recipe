@@ -1,4 +1,4 @@
-// app/admin/recipe-form.tsx
+// app/recipe-form.tsx
 import { useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -10,12 +10,12 @@ import {
   getRecipeForAdmin,
   deleteRecipe,
   uploadRecipeImage,
-} from '../../services/adminRecipeService';
-import { useThemeStore } from '../../store/useThemeStore';
-import ThemedBackground from '../../components/ThemedBackground';
-import { useTopInset } from '../../hooks/useTopInset';
-import type { Region, Difficulty, Recipe, Ingredient, CookStep } from '../../types';
-import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../../components/ResponsiveText';
+} from '../services/adminRecipeService';
+import { useThemeStore } from '../store/useThemeStore';
+import ThemedBackground from '../components/ThemedBackground';
+import { useTopInset } from '../hooks/useTopInset';
+import type { Region, Difficulty, Recipe, Ingredient, CookStep } from '../types';
+import { ResponsiveText as Text, ResponsiveTextInput as TextInput } from '../components/ResponsiveText';
 
 // If this screen ever crashes, show the error here instead of silently going back.
 export { ErrorBoundary } from 'expo-router';
@@ -318,7 +318,7 @@ export default function RecipeFormScreen() {
       // Only offer/send a notification the first time a recipe becomes visible to users.
       if (notifyUsers && published && !wasPublished) {
         try {
-          const { notifyAllUsersNewRecipe } = await import('../../services/recipeNotifications');
+          const { notifyAllUsersNewRecipe } = await import('../services/recipeNotifications');
           const count = await notifyAllUsersNewRecipe(title.trim());
           Alert.alert('Recipe saved', `Notified ${count} user${count === 1 ? '' : 's'}.`);
         } catch (err: any) {
